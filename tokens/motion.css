@@ -1,0 +1,65 @@
+/* ============================================================
+   Caden — motion.css
+   Calm, organic motion. Soft spring-like easings, breathing
+   loops, and named keyframes for the morphing presence. Caden's
+   movement is fluid and unhurried — it drifts, it never snaps.
+   ============================================================ */
+
+:root {
+  /* Easings */
+  --ease:       cubic-bezier(0.32, 0.72, 0.24, 1);   /* @kind other */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);       /* @kind other */
+  --ease-soft:  cubic-bezier(0.45, 0.05, 0.2, 1);    /* @kind other */
+  --ease-spring:cubic-bezier(0.34, 1.4, 0.5, 1);     /* @kind other */
+
+  /* Durations */
+  --dur-fast: 0.16s;   /* @kind other */
+  --dur:      0.3s;    /* @kind other */
+  --dur-slow: 0.6s;    /* @kind other */
+  --dur-drift:1.1s;    /* @kind other */
+  --breathe:  6s;      /* @kind other */
+  --morph:    14s;     /* @kind other */
+}
+
+/* ---- Signature keyframes ---- */
+
+/* Organic shape morph — cycle through the blob radii presets */
+@keyframes caden-morph {
+  0%,100% { border-radius: var(--blob-1); }
+  25%     { border-radius: var(--blob-2); }
+  50%     { border-radius: var(--blob-3); }
+  75%     { border-radius: var(--blob-4); }
+}
+
+/* Slow breathing scale + glow pulse for the idle presence */
+@keyframes caden-breathe {
+  0%,100% { transform: scale(1);    filter: brightness(1); }
+  50%     { transform: scale(1.05); filter: brightness(1.08); }
+}
+
+/* Listening — faster, tighter pulse */
+@keyframes caden-listen {
+  0%,100% { transform: scale(1);    box-shadow: var(--glow); }
+  50%     { transform: scale(1.09); box-shadow: var(--glow-lg); }
+}
+
+/* Thinking — gentle rotation of the inner gradient */
+@keyframes caden-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Reveal: content rising as the presence steps aside */
+@keyframes caden-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Soft ring ripple emitted while listening */
+@keyframes caden-ripple {
+  0%   { transform: scale(0.9); opacity: 0.5; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-drift: 0.001s; /* @kind other */ }
+}

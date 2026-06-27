@@ -1,0 +1,35 @@
+/* ============================================================
+   Caden — typography.css
+   Newsreader (warm editorial serif) for display + wordmark,
+   DM Sans for prose, IBM Plex Mono for Caden's "system voice".
+   ============================================================ */
+
+:root {
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-body:    "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Fluid type scale */
+  --t-hero:    clamp(3.5rem, 10vw, 8rem);     /* @kind font */
+  --t-display: clamp(2.1rem, 5vw, 3.4rem);    /* @kind font */
+  --t-h1:      clamp(1.8rem, 4vw, 2.6rem);    /* @kind font */
+  --t-h2:      clamp(1.5rem, 3.2vw, 2.1rem);  /* @kind font */
+  --t-h3:      clamp(1.15rem, 2vw, 1.4rem);   /* @kind font */
+  --t-body-lg: clamp(1.05rem, 1.6vw, 1.3rem); /* @kind font */
+  --t-body:    1rem;        /* @kind font */
+  --t-small:   0.8125rem;   /* @kind font */
+  --t-mono:    0.75rem;     /* @kind font */
+
+  /* Weights */
+  --w-display: 500;        /* @kind font */
+  --w-display-bold: 600;   /* @kind font */
+  --w-body: 400;           /* @kind font */
+  --w-body-medium: 500;    /* @kind font */
+
+  /* Line + letter */
+  --lh-tight: 1.04;        /* @kind other */
+  --lh-snug: 1.25;         /* @kind other */
+  --lh-body: 1.62;         /* @kind other */
+  --ls-display: -0.018em;  /* @kind other */
+  --ls-eyebrow: 0.22em;    /* @kind other */
+}

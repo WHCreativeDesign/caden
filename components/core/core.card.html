@@ -1,0 +1,58 @@
+<!-- @dsCard group="Components" viewport="700x340" name="Core primitives" subtitle="Presence orb, buttons, icons, status" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../../styles.css" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+  body { margin: 0; background: var(--bg); padding: 24px; }
+  .row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .col { display: flex; gap: 28px; align-items: center; }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+  .caden-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .caden-btn:active { transform: translateY(1px); }
+  .caden-iconbtn:hover { background: var(--hb) !important; color: var(--text) !important; }
+  .lbl { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+  const { PresenceOrb, Button, IconButton, Icon, StatusDot } = window.CadenDesignSystem_d87b20;
+  function Demo() {
+    return (
+      <div className="col">
+        <div className="stack" style={{ alignItems: "center" }}>
+          <PresenceOrb size={130} state="idle" flat />
+          <span className="lbl">presence · idle</span>
+        </div>
+        <div className="stack">
+          <div className="row">
+            <Button variant="primary" iconRight="arrowRight">Open Caden</Button>
+            <Button variant="ghost" icon="mic">Speak</Button>
+            <Button variant="quiet">Dismiss</Button>
+          </div>
+          <div className="row">
+            <IconButton name="mic" label="Voice" tone="accent" />
+            <IconButton name="plus" label="New" />
+            <IconButton name="bell" label="Alerts" />
+            <span style={{ width: 1, height: 28, background: "var(--border-strong)" }}></span>
+            <span className="row" style={{ gap: 8 }}><StatusDot tone="on" /> <span className="lbl">online</span></span>
+            <span className="row" style={{ gap: 8 }}><StatusDot tone="idle" /> <span className="lbl">idle</span></span>
+            <span className="row" style={{ gap: 8 }}><StatusDot tone="error" /> <span className="lbl">error</span></span>
+          </div>
+          <div className="row" style={{ color: "var(--text-muted)", gap: 14 }}>
+            <Icon name="chat" /><Icon name="activity" /><Icon name="shield" /><Icon name="device" /><Icon name="wrench" /><Icon name="clock" /><Icon name="sparkle" /><Icon name="home" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+</script>
+</body>
+</html>

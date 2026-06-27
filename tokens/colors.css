@@ -1,0 +1,90 @@
+/* ============================================================
+   Caden — colors.css
+   Earthy, warm palette. Cream paper surfaces, espresso ink,
+   terracotta primary with ochre + sage as the supporting warm
+   family. Status colors are functional only — never decoration.
+   ============================================================ */
+
+:root {
+  /* --- Raw warm ramp (sand → espresso) --- */
+  --clay-50:  #FBF6EE;   /* warm paper */
+  --clay-100: #F4ECE0;   /* page sand */
+  --clay-150: #EEE3D2;
+  --clay-200: #E6D8C3;
+  --clay-300: #DAC7AC;
+  --clay-400: #C2AC8C;
+  --clay-500: #9A8C79;   /* dim */
+  --clay-600: #6F6253;   /* muted */
+  --clay-700: #4A3F33;
+  --clay-800: #2E261F;   /* ink */
+  --clay-900: #221B14;   /* espresso */
+  --clay-950: #18120D;   /* deepest */
+
+  /* --- Terracotta (primary brand accent) --- */
+  --terra-300: #E6A988;
+  --terra-400: #D88A6A;
+  --terra-500: #C46A4B;   /* primary */
+  --terra-600: #A4502F;
+  --terra-700: #823D22;
+
+  /* --- Ochre (secondary, golden warmth) --- */
+  --ochre-300: #EAC079;
+  --ochre-400: #E0A94E;
+  --ochre-500: #D2922F;
+  --ochre-600: #AE7421;
+
+  /* --- Sage (organic / calm counterpoint) --- */
+  --sage-300: #B4BE97;
+  --sage-400: #94A073;
+  --sage-500: #74804F;
+  --sage-600: #5A6440;
+
+  /* --- Surfaces --- */
+  --bg:            var(--clay-100);   /* page */
+  --bg-2:          var(--clay-150);   /* sunk areas */
+  --surface:       var(--clay-50);    /* cards */
+  --surface-2:     #FFFCF7;           /* raised / popovers */
+  --surface-sunk:  var(--clay-200);   /* wells, tracks */
+  --ink-panel:     var(--clay-900);   /* immersive dark warm panel */
+  --ink-panel-2:   var(--clay-800);
+
+  /* --- Lines --- */
+  --border:        var(--clay-200);
+  --border-strong: var(--clay-300);
+  --border-ink:    rgba(244, 236, 224, 0.12);  /* hairlines on dark panels */
+
+  /* --- Text --- */
+  --text:          var(--clay-800);
+  --text-muted:    var(--clay-600);
+  --text-dim:      var(--clay-500);
+  --text-on-ink:   #F3E9DA;           /* text on dark warm panels */
+  --text-on-ink-muted: #BCAC97;
+  --text-on-accent:#FFF8F1;           /* text on terracotta */
+
+  /* --- Accent: terracotta --- */
+  --accent:        var(--terra-500);
+  --accent-bright: var(--terra-400);
+  --accent-deep:   var(--terra-600);
+  --accent-wash:   rgba(196, 106, 75, 0.12);
+  --accent-line:   rgba(196, 106, 75, 0.34);
+
+  /* --- Supporting accents --- */
+  --gold:          var(--ochre-500);
+  --gold-wash:     rgba(210, 146, 47, 0.14);
+  --moss:          var(--sage-500);
+  --moss-wash:     rgba(116, 128, 79, 0.15);
+
+  /* --- Functional status --- */
+  --ok:        #6E8B4E;
+  --warn:      var(--ochre-500);
+  --err:       #BC4B3C;
+  --ok-wash:   rgba(110, 139, 78, 0.14);
+  --warn-wash: rgba(210, 146, 47, 0.14);
+  --err-wash:  rgba(188, 75, 60, 0.13);
+
+  /* --- Presence gradient (the morphing Caden orb) --- */
+  --presence-a: #E0A94E;   /* ochre core */
+  --presence-b: #C46A4B;   /* terracotta */
+  --presence-c: #A4502F;   /* deep clay edge */
+  --presence-glow: rgba(196, 106, 75, 0.45);
+}

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Brand — Caden Design System</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { padding: 80px var(--s-5) var(--s-9); max-width: 960px; margin-inline: auto; }
+
+  .back {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    margin-bottom: var(--s-6);
+    transition: color var(--dur) var(--ease);
+  }
+  .back:hover { color: var(--accent); }
+
+  .page-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    font-weight: 500;
+    letter-spacing: var(--ls-eyebrow);
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: var(--s-3);
+  }
+
+  h1 { font-size: var(--t-h1); margin-bottom: var(--s-3); }
+
+  .page-sub {
+    font-size: var(--t-body-lg);
+    margin-bottom: var(--s-8);
+    max-width: 560px;
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    font-weight: 500;
+    letter-spacing: var(--ls-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: var(--s-8);
+    margin-bottom: var(--s-5);
+    padding-bottom: var(--s-2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ---- Wordmark ---- */
+  .wordmark-demo {
+    display: flex;
+    align-items: center;
+    gap: var(--s-5);
+    flex-wrap: wrap;
+    margin-bottom: var(--s-5);
+  }
+
+  .wm {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    font-family: var(--font-display);
+    font-weight: var(--w-display);
+    letter-spacing: -0.01em;
+    text-decoration: none;
+  }
+
+  .wm-dot {
+    border-radius: 50%;
+    animation: pulse-ring 2.6s var(--ease) infinite;
+    flex: 0 0 auto;
+  }
+
+  .wm-lg { font-size: 2.4rem; }
+  .wm-md { font-size: 1.5rem; }
+  .wm-sm { font-size: 1.1rem; }
+
+  .wm-dot-lg { width: 11px; height: 11px; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-wash); }
+  .wm-dot-md { width: 9px; height: 9px; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+  .wm-dot-sm { width: 7px; height: 7px; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+
+  .wm-light { color: var(--text); }
+  .wm-dark { color: var(--text-on-ink); }
+
+  .dark-bg {
+    background: var(--ink-panel);
+    padding: var(--s-5);
+    border-radius: var(--r-lg);
+    display: inline-flex;
+  }
+
+  /* ---- Orb states ---- */
+  .orb-states {
+    display: flex;
+    gap: var(--s-6);
+    flex-wrap: wrap;
+    margin-bottom: var(--s-5);
+  }
+
+  .orb-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-3);
+  }
+
+  .orb-demo {
+    width: 100px; height: 100px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .orb-core {
+    width: 100%; height: 100%;
+    border-radius: var(--blob-1);
+    background: radial-gradient(circle at 34% 30%, var(--presence-a) 0%, var(--presence-b) 46%, var(--presence-c) 100%);
+    position: relative;
+  }
+
+  .orb-core-sheen {
+    position: absolute; inset: 8%;
+    border-radius: inherit;
+    background: conic-gradient(from 0deg, rgba(255,248,241,0) 0%, rgba(255,248,241,0.34) 22%, rgba(255,248,241,0) 48%, rgba(255,248,241,0.18) 72%, rgba(255,248,241,0) 100%);
+    mix-blend-mode: soft-light;
+    animation: caden-spin 16s linear infinite;
+  }
+
+  .orb-core.idle { box-shadow: var(--glow); animation: caden-breathe var(--breathe) var(--ease-soft) infinite, caden-morph var(--morph) var(--ease-soft) infinite; }
+  .orb-core.listening { box-shadow: var(--glow-lg); animation: caden-listen 1.6s var(--ease-soft) infinite, caden-morph 8s var(--ease-soft) infinite; }
+  .orb-core.thinking { box-shadow: var(--glow); animation: caden-breathe 3.2s var(--ease-soft) infinite, caden-morph 6s var(--ease-soft) infinite; }
+  .orb-core.speaking { box-shadow: var(--glow-lg); animation: caden-breathe 2.4s var(--ease-soft) infinite, caden-morph 9s var(--ease-soft) infinite; }
+
+  .orb-core.listening .orb-core-sheen { animation: caden-spin 8s linear infinite; }
+  .orb-core.thinking .orb-core-sheen { animation: caden-spin 3.5s linear infinite; }
+
+  .orb-ripple {
+    position: absolute; inset: 0;
+    border-radius: var(--blob-2);
+    border: 1.5px solid var(--accent-line);
+    pointer-events: none;
+    animation: caden-ripple 2.4s var(--ease-out) infinite;
+  }
+  .orb-ripple:nth-child(2) { animation-delay: 0.7s; }
+  .orb-ripple:nth-child(3) { animation-delay: 1.4s; }
+
+  .orb-state-label {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ---- Voice & tone ---- */
+  .voice-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: var(--s-5);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--s-4);
+  }
+
+  .voice-label {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: var(--s-3);
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+  }
+
+  .voice-label-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex: 0 0 auto;
+  }
+
+  .voice-quote {
+    font-family: var(--font-body);
+    font-size: var(--t-body-lg);
+    line-height: var(--lh-body);
+    color: var(--text);
+  }
+
+  .voice-meta {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    color: var(--text-dim);
+    margin-top: var(--s-3);
+    letter-spacing: 0.06em;
+  }
+
+  /* ---- Radius demo ---- */
+  .radius-row {
+    display: flex;
+    gap: var(--s-5);
+    flex-wrap: wrap;
+    margin-bottom: var(--s-4);
+  }
+
+  .radius-chip {
+    width: 80px; height: 80px;
+    background: var(--accent-wash);
+    border: 1.5px solid var(--accent-line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .radius-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: var(--s-2);
+    letter-spacing: 0.08em;
+    text-align: center;
+  }
+
+  .blob-chip {
+    width: 100px; height: 100px;
+    background: radial-gradient(circle at 34% 30%, var(--presence-a) 0%, var(--presence-b) 60%, var(--presence-c) 100%);
+    box-shadow: var(--glow);
+    animation: caden-morph var(--morph) var(--ease-soft) infinite;
+  }
+
+  /* ---- Motion rules ---- */
+  .motion-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+  }
+
+  .motion-item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-5);
+    padding: var(--s-3) 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .motion-name {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    color: var(--accent-deep);
+    width: 140px;
+    flex: 0 0 auto;
+    letter-spacing: 0.08em;
+  }
+
+  .motion-val {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    color: var(--text-muted);
+    flex: 1;
+    letter-spacing: 0.04em;
+  }
+
+  .motion-use {
+    font-family: var(--font-body);
+    font-size: var(--t-small);
+    color: var(--text-dim);
+    flex: 1;
+  }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  Back
+</a>
+
+<div class="page-eyebrow">Caden Design System</div>
+<h1>Brand</h1>
+<p class="page-sub">The warm presence language — wordmark, orb states, voice, shape, and motion. The three things most worth your eye.</p>
+
+<!-- Wordmark -->
+<div class="section-label">Wordmark</div>
+<div class="wordmark-demo">
+  <div>
+    <div class="wm wm-lg wm-light">
+      <span class="wm-dot wm-dot-lg"></span>
+      Caden
+    </div>
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:var(--s-2);letter-spacing:0.08em">large · light surface</div>
+  </div>
+  <div>
+    <div class="wm wm-md wm-light">
+      <span class="wm-dot wm-dot-md"></span>
+      Caden
+    </div>
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:var(--s-2);letter-spacing:0.08em">nav / default</div>
+  </div>
+  <div>
+    <div class="wm wm-sm wm-light">
+      <span class="wm-dot wm-dot-sm"></span>
+      Caden
+    </div>
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:var(--s-2);letter-spacing:0.08em">small / footer</div>
+  </div>
+  <div class="dark-bg">
+    <div class="wm wm-md wm-dark">
+      <span class="wm-dot wm-dot-md"></span>
+      Caden
+    </div>
+  </div>
+</div>
+<p style="font-family:var(--font-mono);font-size:var(--t-mono);color:var(--text-dim);letter-spacing:0.06em">"Caden" in Newsreader 500 with a pulsing terracotta dot. No separate logomark file — the wordmark + dot is the mark.</p>
+
+<!-- Presence orb states -->
+<div class="section-label">Presence orb · four states</div>
+<div class="orb-states">
+  <div class="orb-item">
+    <div class="orb-demo">
+      <div class="orb-core idle"><div class="orb-core-sheen"></div></div>
+    </div>
+    <span class="orb-state-label">idle</span>
+  </div>
+  <div class="orb-item">
+    <div class="orb-demo">
+      <span class="orb-ripple"></span>
+      <span class="orb-ripple"></span>
+      <span class="orb-ripple"></span>
+      <div class="orb-core listening"><div class="orb-core-sheen"></div></div>
+    </div>
+    <span class="orb-state-label">listening</span>
+  </div>
+  <div class="orb-item">
+    <div class="orb-demo">
+      <div class="orb-core thinking"><div class="orb-core-sheen"></div></div>
+    </div>
+    <span class="orb-state-label">thinking</span>
+  </div>
+  <div class="orb-item">
+    <div class="orb-demo">
+      <div class="orb-core speaking"><div class="orb-core-sheen"></div></div>
+    </div>
+    <span class="orb-state-label">speaking</span>
+  </div>
+</div>
+
+<!-- Voice & tone -->
+<div class="section-label">Voice · how Caden speaks</div>
+<div class="voice-card">
+  <div class="voice-label"><span class="voice-label-dot"></span>Caden · system</div>
+  <div class="voice-quote">Quiet night — six agents reported in clean, no errors.</div>
+  <div class="voice-meta">First person · plain · specific. Never breathless, never salesy.</div>
+</div>
+<div class="voice-card">
+  <div class="voice-label"><span class="voice-label-dot"></span>Caden · news</div>
+  <div class="voice-quote">I scanned 41 stories since 6 am. Two are worth your eye: the rate decision and the contractor bill. Everything else is noise — I'll hold it.</div>
+  <div class="voice-meta">Real numbers · real times · brevity with specifics.</div>
+</div>
+<div class="voice-card">
+  <div class="voice-label"><span class="voice-label-dot"></span>Caden · schedule</div>
+  <div class="voice-quote">Your 2 pm moved to 2:30. I updated the reminder and blocked the 10–11:30 window for the contractor call — no conflicts.</div>
+  <div class="voice-meta">Verbs first · active · sentence case throughout.</div>
+</div>
+<p style="font-family:var(--font-mono);font-size:var(--t-mono);color:var(--text-dim);letter-spacing:0.06em;margin-top:var(--s-4)">No emoji. No lorem ipsum. Mono = Caden's system voice; prose = Caden speaking to you.</p>
+
+<!-- Shape -->
+<div class="section-label">Shape · soft, round, organic</div>
+<div class="radius-row">
+  <div>
+    <div class="radius-chip" style="border-radius:var(--r-sm)"></div>
+    <div class="radius-label">--r-sm<br>8px</div>
+  </div>
+  <div>
+    <div class="radius-chip" style="border-radius:var(--r)"></div>
+    <div class="radius-label">--r<br>14px</div>
+  </div>
+  <div>
+    <div class="radius-chip" style="border-radius:var(--r-lg)"></div>
+    <div class="radius-label">--r-lg<br>22px</div>
+  </div>
+  <div>
+    <div class="radius-chip" style="border-radius:var(--r-xl)"></div>
+    <div class="radius-label">--r-xl<br>32px</div>
+  </div>
+  <div>
+    <div class="radius-chip" style="border-radius:var(--r-pill)"></div>
+    <div class="radius-label">--r-pill<br>999px</div>
+  </div>
+  <div>
+    <div class="blob-chip radius-chip" style="width:100px;height:100px;border:none;"></div>
+    <div class="radius-label">blob<br>organic</div>
+  </div>
+</div>
+
+<!-- Motion -->
+<div class="section-label">Motion · calm, unhurried, organic</div>
+<div class="motion-row">
+  <div class="motion-item">
+    <span class="motion-name">--ease</span>
+    <span class="motion-val">cubic-bezier(0.32, 0.72, 0.24, 1)</span>
+    <span class="motion-use">Default settle — hover, reveals</span>
+  </div>
+  <div class="motion-item">
+    <span class="motion-name">--ease-out</span>
+    <span class="motion-val">cubic-bezier(0.16, 1, 0.3, 1)</span>
+    <span class="motion-use">Content reveals — fast out, settled end</span>
+  </div>
+  <div class="motion-item">
+    <span class="motion-name">--ease-spring</span>
+    <span class="motion-val">cubic-bezier(0.34, 1.4, 0.5, 1)</span>
+    <span class="motion-use">Subtle overshoot — playful moments only</span>
+  </div>
+  <div class="motion-item">
+    <span class="motion-name">--dur-drift</span>
+    <span class="motion-val">1.1s</span>
+    <span class="motion-use">Orb glide across canvas</span>
+  </div>
+  <div class="motion-item">
+    <span class="motion-name">--breathe</span>
+    <span class="motion-val">6s</span>
+    <span class="motion-use">Idle scale loop (1 → 1.05)</span>
+  </div>
+  <div class="motion-item">
+    <span class="motion-name">--morph</span>
+    <span class="motion-val">14s</span>
+    <span class="motion-use">Blob radius cycle through presets</span>
+  </div>
+</div>
+
+</body>
+</html>

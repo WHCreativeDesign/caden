@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Caden — always on, always aware</title>
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  /* ---- Canvas layout ---- */
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    position: relative;
+  }
+
+  /* Ambient light — soft radial behind orb area */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 42%, rgba(196,106,75,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 50% 42%, rgba(224,169,78,0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---- Top bar ---- */
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--s-4) var(--s-5);
+  }
+
+  .wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: var(--w-display);
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .wordmark-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-wash);
+    animation: pulse-ring 2.6s var(--ease) infinite;
+    flex: 0 0 auto;
+  }
+
+  .topbar-status {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 3px var(--ok-wash);
+    flex: 0 0 auto;
+  }
+
+  /* ---- Stage — orb + prompt live here ---- */
+  .stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+    padding: var(--s-10) var(--s-5) 160px;
+  }
+
+  /* ---- Orb wrapper — drifts left when answer is shown ---- */
+  .orb-wrap {
+    transition: transform var(--dur-drift) var(--ease), opacity var(--dur-slow) var(--ease);
+    will-change: transform;
+  }
+
+  .orb-wrap.drifted {
+    transform: translateX(-38vw) translateY(-6vh);
+  }
+
+  /* ---- The morphing orb ---- */
+  .orb {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .orb-core {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--blob-1);
+    background: radial-gradient(circle at 34% 30%, var(--presence-a) 0%, var(--presence-b) 46%, var(--presence-c) 100%);
+    box-shadow: var(--glow);
+    animation: caden-breathe var(--breathe) var(--ease-soft) infinite,
+               caden-morph var(--morph) var(--ease-soft) infinite;
+    will-change: transform, border-radius;
+    position: relative;
+  }
+
+  .orb-sheen {
+    position: absolute;
+    inset: 8%;
+    border-radius: inherit;
+    background: conic-gradient(from 0deg, rgba(255,248,241,0) 0%, rgba(255,248,241,0.34) 22%, rgba(255,248,241,0) 48%, rgba(255,248,241,0.18) 72%, rgba(255,248,241,0) 100%);
+    mix-blend-mode: soft-light;
+    animation: caden-spin 16s linear infinite;
+    pointer-events: none;
+  }
+
+  .orb-highlight {
+    position: absolute;
+    top: 14%; left: 20%;
+    width: 38%; height: 30%;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, rgba(255,250,243,0.55), rgba(255,250,243,0) 70%);
+    filter: blur(2px);
+    pointer-events: none;
+  }
+
+  .orb-ripple {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--blob-2);
+    border: 1.5px solid var(--accent-line);
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  /* State: listening */
+  .orb.is-listening .orb-core {
+    animation: caden-listen 1.6s var(--ease-soft) infinite,
+               caden-morph 8s var(--ease-soft) infinite;
+    box-shadow: var(--glow-lg);
+  }
+  .orb.is-listening .orb-sheen {
+    animation: caden-spin 8s linear infinite;
+  }
+  .orb.is-listening .orb-ripple {
+    opacity: 1;
+    animation: caden-ripple 2.4s var(--ease-out) infinite;
+  }
+  .orb.is-listening .orb-ripple:nth-child(2) { animation-delay: 0.7s; }
+  .orb.is-listening .orb-ripple:nth-child(3) { animation-delay: 1.4s; }
+
+  /* State: thinking */
+  .orb.is-thinking .orb-core {
+    animation: caden-breathe 3.2s var(--ease-soft) infinite,
+               caden-morph 6s var(--ease-soft) infinite;
+  }
+  .orb.is-thinking .orb-sheen {
+    animation: caden-spin 3.5s linear infinite;
+  }
+
+  /* State: speaking */
+  .orb.is-speaking .orb-core {
+    box-shadow: var(--glow-lg);
+    animation: caden-breathe 2.4s var(--ease-soft) infinite,
+               caden-morph 9s var(--ease-soft) infinite;
+  }
+
+  /* ---- Prompt area — tap to speak prompt ---- */
+  .canvas-prompt {
+    margin-top: var(--s-5);
+    font-family: var(--font-display);
+    font-size: var(--t-h3);
+    font-weight: var(--w-display);
+    letter-spacing: var(--ls-display);
+    color: var(--text-muted);
+    text-align: center;
+    transition: opacity var(--dur-slow) var(--ease);
+  }
+
+  .canvas-prompt.hidden { opacity: 0; pointer-events: none; }
+
+  /* ---- Answer panel — rises in when orb drifts ---- */
+  .answer-panel {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%) translateX(20px);
+    width: min(480px, 44vw);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-slow) var(--ease) 0.2s,
+                transform var(--dur-drift) var(--ease) 0.1s;
+  }
+
+  .answer-panel.visible {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+    pointer-events: auto;
+  }
+
+  .answer-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: var(--s-6) var(--s-6);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .answer-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    font-weight: 500;
+    letter-spacing: var(--ls-eyebrow);
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    margin-bottom: var(--s-4);
+  }
+
+  .answer-eyebrow-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex: 0 0 auto;
+  }
+
+  .answer-body {
+    font-family: var(--font-body);
+    font-size: var(--t-body-lg);
+    line-height: var(--lh-body);
+    color: var(--text);
+    animation: caden-rise 0.6s var(--ease-out) both;
+  }
+
+  .answer-meta {
+    margin-top: var(--s-4);
+    padding-top: var(--s-4);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+  }
+
+  .answer-meta-label {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+  }
+
+  .answer-actions {
+    display: flex;
+    gap: var(--s-2);
+  }
+
+  .icon-btn {
+    width: 36px; height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-pill);
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  .icon-btn:hover { background: var(--bg-2); color: var(--text); }
+
+  /* ---- Floating input bar ---- */
+  .input-bar {
+    position: fixed;
+    bottom: var(--s-6);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    width: min(600px, calc(100vw - 48px));
+    background: rgba(251, 246, 238, 0.88);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-pill);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+    transition: box-shadow var(--dur) var(--ease);
+  }
+  .input-bar:focus-within {
+    box-shadow: var(--shadow-lg), 0 0 0 3px var(--accent-wash);
+    border-color: var(--accent-line);
+  }
+
+  .input-field {
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: var(--t-body);
+    color: var(--text);
+    background: transparent;
+    border: none;
+    outline: none;
+    min-width: 0;
+    caret-color: var(--accent);
+  }
+  .input-field::placeholder { color: var(--text-dim); }
+
+  .input-mic-btn {
+    width: 44px; height: 44px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-pill);
+    background: var(--accent);
+    color: var(--text-on-accent);
+    border: none;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease);
+  }
+  .input-mic-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .input-mic-btn:active { transform: translateY(1px); }
+  .input-mic-btn.is-active {
+    background: var(--accent-deep);
+    box-shadow: var(--glow);
+    animation: caden-breathe 1.6s var(--ease-soft) infinite;
+  }
+
+  .input-send-btn {
+    width: 44px; height: 44px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-pill);
+    background: var(--bg-2);
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease);
+  }
+  .input-send-btn:hover { background: var(--accent-wash); color: var(--accent); transform: translateY(-1px); }
+  .input-send-btn:active { transform: translateY(1px); }
+
+  /* ---- State label (mono, bottom-center above bar) ---- */
+  .state-label {
+    position: fixed;
+    bottom: 110px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+    transition: opacity var(--dur-slow) var(--ease), color var(--dur) var(--ease);
+    z-index: 5;
+  }
+  .state-label.listening { color: var(--accent); }
+  .state-label.thinking  { color: var(--gold); }
+  .state-label.speaking  { color: var(--moss); }
+
+  /* ---- State demo controls (dev only) ---- */
+  .demo-controls {
+    position: fixed;
+    top: var(--s-4);
+    right: var(--s-5);
+    z-index: 20;
+    display: flex;
+    gap: var(--s-2);
+    align-items: center;
+  }
+
+  .demo-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
+  .demo-btn:hover { background: var(--bg-2); color: var(--text); }
+  .demo-btn.active { background: var(--accent); color: var(--text-on-accent); border-color: var(--accent); }
+
+  /* SVG icons (inline) */
+  .icon { display: block; flex: 0 0 auto; }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<header class="topbar">
+  <div class="wordmark">
+    <span class="wordmark-dot"></span>
+    Caden
+  </div>
+  <div class="topbar-status">
+    <span class="status-dot"></span>
+    <span>6 agents · online</span>
+  </div>
+</header>
+
+<!-- Stage -->
+<main class="stage" id="stage">
+
+  <!-- Orb -->
+  <div class="orb-wrap" id="orbWrap">
+    <div class="orb" id="orb">
+      <!-- Ripple rings (visible in listening state) -->
+      <span class="orb-ripple"></span>
+      <span class="orb-ripple"></span>
+      <span class="orb-ripple"></span>
+      <!-- Core blob -->
+      <div class="orb-core" id="orbCore">
+        <div class="orb-sheen"></div>
+        <div class="orb-highlight"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prompt hint -->
+  <p class="canvas-prompt" id="canvasPrompt">Say something, or type below.</p>
+
+  <!-- Answer panel (revealed when orb drifts) -->
+  <div class="answer-panel" id="answerPanel">
+    <div class="answer-card">
+      <div class="answer-eyebrow">
+        <span class="answer-eyebrow-dot"></span>
+        <span id="answerLabel">Caden</span>
+      </div>
+      <div class="answer-body" id="answerBody"></div>
+      <div class="answer-meta">
+        <span class="answer-meta-label" id="answerTime">just now · from memory</span>
+        <div class="answer-actions">
+          <button class="icon-btn" title="Copy" onclick="void(0)">
+            <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="icon-btn" title="Dismiss" id="dismissBtn">
+            <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- State label -->
+<div class="state-label" id="stateLabel">Idle · ready</div>
+
+<!-- Floating input bar -->
+<div class="input-bar">
+  <input
+    class="input-field"
+    id="inputField"
+    type="text"
+    placeholder="Ask Caden anything…"
+    autocomplete="off"
+    spellcheck="false"
+  />
+  <button class="input-send-btn" id="sendBtn" title="Send" aria-label="Send">
+    <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l16-7-7 16-2-7-7-2Z"/></svg>
+  </button>
+  <button class="input-mic-btn" id="micBtn" title="Voice input" aria-label="Voice input">
+    <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="9" y="2.5" width="6" height="11" rx="3"/>
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0"/>
+      <path d="M12 17.5V21"/>
+      <path d="M8.5 21h7"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Dev demo controls -->
+<div class="demo-controls" id="demoControls">
+  <button class="demo-btn active" onclick="setState('idle')">Idle</button>
+  <button class="demo-btn" onclick="setState('listening')">Listening</button>
+  <button class="demo-btn" onclick="setState('thinking')">Thinking</button>
+  <button class="demo-btn" onclick="setState('speaking')">Answer</button>
+</div>
+
+<script>
+  const orb         = document.getElementById('orb');
+  const orbWrap     = document.getElementById('orbWrap');
+  const answerPanel = document.getElementById('answerPanel');
+  const answerBody  = document.getElementById('answerBody');
+  const answerLabel = document.getElementById('answerLabel');
+  const answerTime  = document.getElementById('answerTime');
+  const canvasPrompt= document.getElementById('canvasPrompt');
+  const stateLabel  = document.getElementById('stateLabel');
+  const micBtn      = document.getElementById('micBtn');
+  const sendBtn     = document.getElementById('sendBtn');
+  const inputField  = document.getElementById('inputField');
+  const dismissBtn  = document.getElementById('dismissBtn');
+  const demoControls= document.getElementById('demoControls');
+
+  const STATES = ['idle','listening','thinking','speaking'];
+
+  const ANSWERS = [
+    {
+      label: "Caden · news digest",
+      body: "I scanned 41 stories since 6 am. Two are worth your eye: a rate decision moved markets +1.4%, and the contractor bill you've been tracking passed committee. Everything else is noise — I'll hold it.",
+      meta: "just now · news + calendar agents"
+    },
+    {
+      label: "Caden · system check",
+      body: "Quiet night — six agents reported clean. Disk is at 38%, last backup ran at 03:14. One dependency flagged outdated; I've queued a patch for your next maintenance window.",
+      meta: "03:14 backup · self-check agent"
+    },
+    {
+      label: "Caden · schedule",
+      body: "Your 2 pm moved to 2:30 — I updated the reminder. You have a 90-minute window from 10 to 11:30 with no conflicts. I'd suggest the contractor call there.",
+      meta: "just now · calendar agent"
+    },
+    {
+      label: "Caden",
+      body: "Nothing urgent on my side. Six agents have been running cleanly for 14 hours. I'll reach you if something changes — until then, I'm here.",
+      meta: "idle · all agents nominal"
+    },
+  ];
+
+  let currentState = 'idle';
+  let answerIdx = 0;
+
+  function setState(s) {
+    if (!STATES.includes(s)) return;
+    const prev = currentState;
+    currentState = s;
+
+    // Update demo buttons
+    demoControls.querySelectorAll('.demo-btn').forEach((b, i) => {
+      b.classList.toggle('active', STATES[i] === s);
+    });
+
+    // Reset orb classes
+    orb.classList.remove('is-listening','is-thinking','is-speaking');
+    if (s === 'listening') orb.classList.add('is-listening');
+    if (s === 'thinking')  orb.classList.add('is-thinking');
+    if (s === 'speaking')  orb.classList.add('is-speaking');
+
+    // Mic button active state
+    micBtn.classList.toggle('is-active', s === 'listening');
+
+    // State label
+    stateLabel.className = 'state-label';
+    const labels = {
+      idle: 'Idle · ready',
+      listening: 'Listening…',
+      thinking: 'Thinking…',
+      speaking: 'Responding'
+    };
+    stateLabel.textContent = labels[s];
+    if (s !== 'idle') stateLabel.classList.add(s);
+
+    // Canvas prompt + answer panel
+    if (s === 'speaking') {
+      const a = ANSWERS[answerIdx % ANSWERS.length];
+      answerBody.textContent = a.body;
+      answerLabel.textContent = a.label;
+      answerTime.textContent = a.meta;
+      // Trigger rise animation by re-inserting
+      answerBody.style.animation = 'none';
+      requestAnimationFrame(() => {
+        answerBody.style.animation = '';
+      });
+      orbWrap.classList.add('drifted');
+      answerPanel.classList.add('visible');
+      canvasPrompt.classList.add('hidden');
+    } else {
+      orbWrap.classList.remove('drifted');
+      answerPanel.classList.remove('visible');
+      canvasPrompt.classList.toggle('hidden', s === 'listening' || s === 'thinking');
+    }
+  }
+
+  // Dismiss answer → back to idle
+  dismissBtn.addEventListener('click', () => {
+    answerIdx++;
+    setState('idle');
+  });
+
+  // Mic button → toggle listening / idle
+  micBtn.addEventListener('click', () => {
+    if (currentState === 'idle') {
+      setState('listening');
+      // Simulate thinking after 2.2s
+      setTimeout(() => {
+        if (currentState === 'listening') setState('thinking');
+      }, 2200);
+      // Then answer after another 2s
+      setTimeout(() => {
+        if (currentState === 'thinking') setState('speaking');
+      }, 4400);
+    } else if (currentState === 'listening') {
+      setState('thinking');
+      setTimeout(() => {
+        if (currentState === 'thinking') setState('speaking');
+      }, 2000);
+    } else {
+      setState('idle');
+    }
+  });
+
+  // Send typed query
+  function sendQuery() {
+    const val = inputField.value.trim();
+    if (!val && currentState !== 'listening') return;
+    inputField.value = '';
+    if (currentState === 'speaking') {
+      answerIdx++;
+    }
+    setState('thinking');
+    setTimeout(() => setState('speaking'), 1800);
+  }
+
+  sendBtn.addEventListener('click', sendQuery);
+  inputField.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendQuery();
+  });
+
+  // Start in idle
+  setState('idle');
+</script>
+</body>
+</html>

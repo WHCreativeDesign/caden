@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Colors — Caden Design System</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { padding: 80px var(--s-5) var(--s-9); max-width: 1000px; margin-inline: auto; }
+
+  .back {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    margin-bottom: var(--s-6);
+    transition: color var(--dur) var(--ease);
+  }
+  .back:hover { color: var(--accent); }
+
+  .page-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    font-weight: 500;
+    letter-spacing: var(--ls-eyebrow);
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: var(--s-3);
+  }
+
+  h1 {
+    font-size: var(--t-h1);
+    margin-bottom: var(--s-3);
+  }
+
+  .page-sub {
+    font-size: var(--t-body-lg);
+    margin-bottom: var(--s-8);
+    max-width: 520px;
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    font-weight: 500;
+    letter-spacing: var(--ls-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: var(--s-4);
+    margin-top: var(--s-7);
+  }
+  .section-label:first-of-type { margin-top: 0; }
+
+  .swatch-row {
+    display: flex;
+    gap: var(--s-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--s-4);
+  }
+
+  .swatch {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+  }
+
+  .swatch-chip {
+    width: 72px;
+    height: 52px;
+    border-radius: var(--r);
+    border: 1px solid rgba(74,63,51,0.12);
+  }
+
+  .swatch-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .swatch-val {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    opacity: 0.7;
+  }
+
+  .status-row {
+    display: flex;
+    gap: var(--s-5);
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: var(--s-4);
+  }
+
+  .status-swatch {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+  }
+
+  .status-dot-demo {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  .status-label-demo {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+  }
+
+  .presence-demo {
+    display: flex;
+    gap: var(--s-6);
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: var(--s-4);
+  }
+
+  .presence-chip {
+    width: 80px; height: 80px;
+    border-radius: var(--blob-1);
+    animation: caden-morph 14s var(--ease-soft) infinite;
+  }
+
+  .presence-gradient {
+    background: radial-gradient(circle at 34% 30%, var(--presence-a) 0%, var(--presence-b) 46%, var(--presence-c) 100%);
+    box-shadow: var(--glow);
+  }
+
+  .presence-a { background: var(--presence-a); }
+  .presence-b { background: var(--presence-b); }
+  .presence-c { background: var(--presence-c); }
+
+  .presence-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: var(--s-2);
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  Back
+</a>
+
+<div class="page-eyebrow">Caden Design System</div>
+<h1>Colors</h1>
+<p class="page-sub">Earthy and warm, lit like afternoon light through paper. Cream surfaces, espresso ink, terracotta lead.</p>
+
+<!-- Clay ramp -->
+<div class="section-label">Clay ramp · sand → espresso</div>
+<div class="swatch-row">
+  <div class="swatch"><div class="swatch-chip" style="background:#FBF6EE"></div><div class="swatch-name">clay-50</div><div class="swatch-val">#FBF6EE</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#F4ECE0"></div><div class="swatch-name">clay-100</div><div class="swatch-val">#F4ECE0</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#EEE3D2"></div><div class="swatch-name">clay-150</div><div class="swatch-val">#EEE3D2</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#E6D8C3"></div><div class="swatch-name">clay-200</div><div class="swatch-val">#E6D8C3</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#DAC7AC"></div><div class="swatch-name">clay-300</div><div class="swatch-val">#DAC7AC</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#C2AC8C"></div><div class="swatch-name">clay-400</div><div class="swatch-val">#C2AC8C</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#9A8C79"></div><div class="swatch-name">clay-500</div><div class="swatch-val">#9A8C79</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#6F6253"></div><div class="swatch-name">clay-600</div><div class="swatch-val">#6F6253</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#4A3F33"></div><div class="swatch-name">clay-700</div><div class="swatch-val">#4A3F33</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#2E261F"></div><div class="swatch-name">clay-800</div><div class="swatch-val">#2E261F</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#221B14"></div><div class="swatch-name">clay-900</div><div class="swatch-val">#221B14</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#18120D"></div><div class="swatch-name">clay-950</div><div class="swatch-val">#18120D</div></div>
+</div>
+
+<!-- Terracotta -->
+<div class="section-label">Terracotta · primary brand accent</div>
+<div class="swatch-row">
+  <div class="swatch"><div class="swatch-chip" style="background:#E6A988"></div><div class="swatch-name">terra-300</div><div class="swatch-val">#E6A988</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#D88A6A"></div><div class="swatch-name">terra-400</div><div class="swatch-val">#D88A6A</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#C46A4B"></div><div class="swatch-name">terra-500</div><div class="swatch-val">#C46A4B</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#A4502F"></div><div class="swatch-name">terra-600</div><div class="swatch-val">#A4502F</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#823D22"></div><div class="swatch-name">terra-700</div><div class="swatch-val">#823D22</div></div>
+</div>
+
+<!-- Ochre + Sage -->
+<div class="section-label">Supporting accents · ochre + sage</div>
+<div class="swatch-row">
+  <div class="swatch"><div class="swatch-chip" style="background:#EAC079"></div><div class="swatch-name">ochre-300</div><div class="swatch-val">#EAC079</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#E0A94E"></div><div class="swatch-name">ochre-400</div><div class="swatch-val">#E0A94E</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#D2922F"></div><div class="swatch-name">ochre-500</div><div class="swatch-val">#D2922F</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#AE7421"></div><div class="swatch-name">ochre-600</div><div class="swatch-val">#AE7421</div></div>
+  <div class="swatch" style="margin-left: var(--s-4)"><div class="swatch-chip" style="background:#B4BE97"></div><div class="swatch-name">sage-300</div><div class="swatch-val">#B4BE97</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#94A073"></div><div class="swatch-name">sage-400</div><div class="swatch-val">#94A073</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#74804F"></div><div class="swatch-name">sage-500</div><div class="swatch-val">#74804F</div></div>
+  <div class="swatch"><div class="swatch-chip" style="background:#5A6440"></div><div class="swatch-name">sage-600</div><div class="swatch-val">#5A6440</div></div>
+</div>
+
+<!-- Status -->
+<div class="section-label">Status · functional only, never decoration</div>
+<div class="status-row">
+  <div class="status-swatch">
+    <span class="status-dot-demo" style="background:#6E8B4E;box-shadow:0 0 0 3px rgba(110,139,78,0.14)"></span>
+    <div>
+      <div class="status-label-demo">on · #6E8B4E</div>
+    </div>
+  </div>
+  <div class="status-swatch">
+    <span class="status-dot-demo" style="background:#D2922F;box-shadow:0 0 0 3px rgba(210,146,47,0.14)"></span>
+    <div>
+      <div class="status-label-demo">warn · ochre-500</div>
+    </div>
+  </div>
+  <div class="status-swatch">
+    <span class="status-dot-demo" style="background:#BC4B3C;box-shadow:0 0 0 3px rgba(188,75,60,0.13)"></span>
+    <div>
+      <div class="status-label-demo">err · #BC4B3C</div>
+    </div>
+  </div>
+</div>
+
+<!-- Presence gradient -->
+<div class="section-label">Presence gradient · the morphing orb</div>
+<div class="presence-demo">
+  <div>
+    <div class="presence-chip presence-gradient"></div>
+    <div class="presence-label">gradient</div>
+  </div>
+  <div>
+    <div class="presence-chip presence-a"></div>
+    <div class="presence-label">ochre core</div>
+  </div>
+  <div>
+    <div class="presence-chip presence-b"></div>
+    <div class="presence-label">terracotta</div>
+  </div>
+  <div>
+    <div class="presence-chip presence-c"></div>
+    <div class="presence-label">deep clay</div>
+  </div>
+</div>
+
+</body>
+</html>
