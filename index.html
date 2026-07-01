@@ -514,31 +514,29 @@
 
   const STATES = ['idle', 'listening', 'thinking', 'speaking'];
 
-  const ANSWERS = [
-    {
-      label: "Caden · news digest",
-      body: "I scanned 41 stories since 6 am. Two are worth your eye: a rate decision moved markets +1.4%, and the contractor bill you've been tracking passed committee. Everything else is noise — I'll hold it.",
-      meta: "just now · news + calendar agents"
-    },
-    {
-      label: "Caden · system check",
-      body: "Quiet night — six agents reported clean. Disk is at 38%, last backup ran at 03:14. One dependency flagged outdated; I've queued a patch for your next maintenance window.",
-      meta: "03:14 backup · self-check agent"
-    },
-    {
-      label: "Caden · schedule",
-      body: "Your 2 pm moved to 2:30 — I updated the reminder. You have a 90-minute window from 10 to 11:30 with no conflicts. I'd suggest the contractor call there.",
-      meta: "just now · calendar agent"
-    },
-    {
-      label: "Caden",
-      body: "Nothing urgent on my side. Six agents have been running cleanly for 14 hours. I'll reach you if something changes — until then, I'm here.",
-      meta: "idle · all agents nominal"
-    },
-  ];
+  // ── Backend (Supabase Edge Function) ──────────────────────────────────────────
+  // The anon key is a public, publishable key — safe to ship in a static frontend.
+  // It only lets callers invoke the function; the secret service-role key that can
+  // read the API-key table lives server-side as a function secret, never here.
+  const CADEN = {
+    endpoint: 'https://lrjiopczasvcrhglweth.supabase.co/functions/v1/chat',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxyamlvcGN6YXN2Y3JoZ2x3ZXRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MTc0NzAsImV4cCI6MjA5ODQ5MzQ3MH0.D_d-1AvzZQNSnC4tlEEy1dcgAyGEZ2-SxcHwV94nOs4',
+    model: 'orchestrator',
+  };
+
+  const SYSTEM_PROMPT =
+    "You are Caden, a calm, present personal home AI. Speak warmly and " +
+    "concisely — a sentence or two, no filler, no bullet lists unless asked. " +
+    "You are always on and always aware; you help without being summoned.";
+
+  // Full conversation history sent to the backend on every turn.
+  const history = [{ role: 'system', content: SYSTEM_PROMPT }];
+
+  // The answer currently shown in the panel (populated by real responses).
+  let currentAnswer = { label: 'Caden', body: '', meta: 'just now' };
 
   let currentState = 'idle';
-  let answerIdx = 0;
+  let inFlight = false;
 
   function setState(s) {
     if (!STATES.includes(s)) return;
@@ -563,10 +561,9 @@
     if (s === 'thinking')  stateLabel.classList.add('thinking');
 
     if (s === 'speaking') {
-      const a = ANSWERS[answerIdx % ANSWERS.length];
-      answerBody.textContent = a.body;
-      answerLabel.textContent = a.label;
-      answerTime.textContent = a.meta;
+      answerBody.textContent = currentAnswer.body;
+      answerLabel.textContent = currentAnswer.label;
+      answerTime.textContent = currentAnswer.meta;
       answerBody.style.animation = 'none';
       requestAnimationFrame(() => { answerBody.style.animation = ''; });
       orbWrap.classList.add('drifted');
@@ -579,32 +576,125 @@
     }
   }
 
-  dismissBtn.addEventListener('click', () => { answerIdx++; setState('idle'); });
+  dismissBtn.addEventListener('click', () => setState('idle'));
 
-  micBtn.addEventListener('click', () => {
-    if (currentState === 'idle') {
-      setState('listening');
-      setTimeout(() => { if (currentState === 'listening') setState('thinking'); }, 3000);
-      setTimeout(() => { if (currentState === 'thinking') setState('speaking'); }, 5500);
-    } else if (currentState === 'listening') {
-      setState('thinking');
-      setTimeout(() => { if (currentState === 'thinking') setState('speaking'); }, 2000);
-    } else {
-      setState('idle');
+  // ── Talk to the backend ───────────────────────────────────────────────────────
+  async function ask(text) {
+    if (inFlight) return;
+    const prompt = text.trim();
+    if (!prompt) return;
+
+    inFlight = true;
+    history.push({ role: 'user', content: prompt });
+    setState('thinking');
+
+    try {
+      const resp = await fetch(CADEN.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CADEN.anonKey}`,
+          'apikey': CADEN.anonKey,
+        },
+        body: JSON.stringify({ model: CADEN.model, messages: history }),
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(prettyError(data) || `Request failed (${resp.status}).`);
+      }
+
+      const reply = data.choices?.[0]?.message?.content?.trim();
+      if (!reply) throw new Error('Caden returned an empty response.');
+
+      history.push({ role: 'assistant', content: reply });
+      currentAnswer = {
+        label: 'Caden',
+        body: reply,
+        meta: `just now · ${data.model || CADEN.model}`,
+      };
+    } catch (err) {
+      // Don't keep a failed turn in history — let the user retry cleanly.
+      if (history[history.length - 1]?.role === 'user') history.pop();
+      currentAnswer = {
+        label: 'Caden · error',
+        body: String(err.message || err),
+        meta: 'could not reach the backend',
+      };
+    } finally {
+      inFlight = false;
+      setState('speaking');
     }
-  });
+  }
+
+  function prettyError(data) {
+    const e = data && data.error;
+    if (!e) return '';
+    if (typeof e === 'string') return e;
+    if (e.error) {
+      // Shape from the chat function when all providers fail.
+      return [e.error, e.groq, e.gemini].filter(Boolean).join(' ');
+    }
+    try { return JSON.stringify(e); } catch { return 'Unknown error.'; }
+  }
 
   function sendQuery() {
-    const val = inputField.value.trim();
-    if (!val && currentState !== 'listening') return;
+    const val = inputField.value;
     inputField.value = '';
-    if (currentState === 'speaking') answerIdx++;
-    setState('thinking');
-    setTimeout(() => setState('speaking'), 1800);
+    ask(val);
   }
 
   sendBtn.addEventListener('click', sendQuery);
   inputField.addEventListener('keydown', e => { if (e.key === 'Enter') sendQuery(); });
+
+  // ── Voice input (browser speech-to-text) ──────────────────────────────────────
+  // Uses the Web Speech API where available (Chrome, Edge, Safari). Transcribes
+  // to text, then routes through the same ask() path. A dedicated Gemini voice
+  // pipeline can replace this later without touching the rest of the flow.
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizer = null;
+
+  if (SpeechRec) {
+    recognizer = new SpeechRec();
+    recognizer.lang = 'en-US';
+    recognizer.interimResults = false;
+    recognizer.maxAlternatives = 1;
+
+    recognizer.addEventListener('result', (e) => {
+      const transcript = e.results[0][0].transcript;
+      inputField.value = transcript;
+    });
+    recognizer.addEventListener('end', () => {
+      if (currentState === 'listening') {
+        const said = inputField.value.trim();
+        inputField.value = '';
+        if (said) ask(said);
+        else setState('idle');
+      }
+    });
+    recognizer.addEventListener('error', () => {
+      if (currentState === 'listening') setState('idle');
+    });
+  }
+
+  micBtn.addEventListener('click', () => {
+    if (!recognizer) {
+      currentAnswer = {
+        label: 'Caden · voice',
+        body: "This browser doesn't support voice input. Try Chrome or Edge, or just type below.",
+        meta: 'speech recognition unavailable',
+      };
+      setState('speaking');
+      return;
+    }
+    if (currentState === 'listening') {
+      recognizer.stop();
+    } else {
+      inputField.value = '';
+      setState('listening');
+      try { recognizer.start(); } catch { setState('idle'); }
+    }
+  });
 
   setState('idle');
 </script>

@@ -17,9 +17,12 @@ GEMINI_KEYS = _split("GEMINI_API_KEYS")
 # ── Supabase key store ───────────────────────────────────────────────────────────
 # Caden pulls its Groq (chat) + Gemini (voice) key pools from a Supabase table so
 # you can add/remove an unlimited number of free-tier keys without redeploying.
-# SUPABASE_SERVICE_ROLE_KEY is required to read the locked-down table (grab it from
-# Supabase → Project Settings → API). Leave these blank to run env-keys-only.
-SUPABASE_URL              = os.getenv("SUPABASE_URL", "").rstrip("/")
+# The project URL isn't secret, so it defaults to Caden's own Supabase project —
+# override via .env only if you point this at a different project.
+# SUPABASE_SERVICE_ROLE_KEY *is* secret and is required to read the locked-down
+# table (grab it from Supabase → Project Settings → API). Leave it blank to run
+# on env-seeded keys only.
+SUPABASE_URL              = os.getenv("SUPABASE_URL", "https://lrjiopczasvcrhglweth.supabase.co").rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 SUPABASE_KEYS_TABLE       = os.getenv("SUPABASE_KEYS_TABLE", "caden_api_keys")
 # How often (seconds) to re-sync the key pools from Supabase. 0 disables refresh.

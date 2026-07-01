@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Caden is a personal home AI — a 24/7 Jarvis-like presence running on a Raspberry Pi. It has two parts: a static frontend deployed to GitHub Pages, and a local Python API server that runs on the Pi.
+Caden is a personal home AI — a 24/7 Jarvis-like presence. It has two parts: a static frontend deployed to GitHub Pages, and a backend that runs entirely on Supabase (Edge Functions + Postgres) — no local hardware, no Pi, no separately-hosted server required.
 
 **Live site:** `https://whcreativedesign.github.io/caden/`
 **Repo:** `WHCreativeDesign/caden`
+**Supabase project:** `lrjiopczasvcrhglweth` (`https://lrjiopczasvcrhglweth.supabase.co`)
 
 ---
 
@@ -44,55 +45,42 @@ No build step. The entire site is `index.html` at the root — a single full-scr
 
 ---
 
-## Backend (`server/`)
+## Backend (`supabase/functions/` — current, hosted-only path)
 
-Python + FastAPI. Runs on a Raspberry Pi, serves an **OpenAI-compatible `/v1/chat/completions` endpoint** so the frontend can call it directly.
-
-**Run locally:**
-```bash
-cd server
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in API keys
-python main.py
-```
+Deno/TypeScript Supabase Edge Functions. No local hardware in the loop: the functions, the key pools, and the Postgres key-cycling logic all live inside the Supabase project.
 
 **Endpoints:**
-- `POST /v1/chat/completions` — main chat endpoint with agent loop
-- `GET /health` — shows per-provider key availability counts
-- `GET /tools` — lists all registered tools in OpenAI schema format
+- `POST /functions/v1/chat` — OpenAI-compatible chat-completions agent loop (`supabase/functions/chat/index.ts`)
+- `GET /functions/v1/health` — per-provider key availability counts (`supabase/functions/health/index.ts`)
 
-**Key cycling:** `KeyCycler` (`providers/key_cycler.py`) round-robins through all keys in the pool. On a 429, the offending key is marked unavailable for 60s and the next key is tried. Add keys by appending to `GROQ_API_KEYS` or `GEMINI_API_KEYS` in `.env` (comma-separated).
+Both require a Supabase JWT on the `Authorization` header (`verify_jwt: true`, the default) — the frontend should send the project's **anon/publishable key**, never the service-role key.
 
-**Provider routing:** Groq (`llama-3.3-70b-versatile`) is primary. If all Groq keys are rate-limited or any exception is raised, the same request is retried on Gemini (`gemini-2.0-flash` via its OpenAI-compatible endpoint). Both use the `openai` SDK with different `base_url` values — no separate SDK needed for Gemini.
+**Key store:** `caden_api_keys` table (`provider` = `groq` | `gemini`, `api_key`, `active`, plus `last_used_at` / `rate_limited_until` / `request_count`). RLS is enabled with **no public policy** — only the service-role key (used internally by the Edge Functions, set as the `SUPABASE_SERVICE_ROLE_KEY` function secret) can read or write it. Add/remove keys via the Supabase SQL editor, table editor, or PostgREST — there is an unlimited number of keys per provider.
 
-**Model profiles** (`config.py`): `orchestrator` (default), `fast`, `deep`. Pass as the `model` field in requests — it's a profile name, not a raw model ID.
+**Key cycling:** lives in Postgres, not in-memory, because Edge Function instances are stateless per invocation. Two `SECURITY DEFINER` RPCs (migration `add_key_cycling_functions`, granted to `service_role` only) do the work atomically:
+- `get_next_api_key(provider)` — `UPDATE ... FOR UPDATE SKIP LOCKED` picks the least-recently-used available key and marks it used, race-safe across concurrent invocations.
+- `mark_api_key_limited(provider, api_key, retry_after_seconds)` — sets `rate_limited_until` after a 429.
 
-**Agent loop** (`routers/chat.py`): Runs up to `MAX_TOOL_ROUNDS` iterations. Each round: call LLM → if tool calls present, execute all of them locally → append results to messages → repeat. Returns when the model produces a response with no tool calls.
+**Provider routing:** Groq (`llama-3.3-70b-versatile`) is primary; on a 429 the function cycles to the next Groq key (up to `MAX_KEY_ATTEMPTS`), and on any other failure or full Groq exhaustion it falls back to Gemini (`gemini-2.0-flash`). Both are called via plain `fetch` against their OpenAI-compatible endpoints — no SDK needed.
 
-**Adding a tool:**
-1. Create or open a file in `server/tools/`
-2. Decorate the function with `@tool(name, description, parameters)` from `tools.registry`
-3. Import the module in `server/tools/__init__.py`
+**Model profiles** (inline `MODELS` map in `chat/index.ts`): `orchestrator` (default), `fast`, `deep`. Pass as the `model` field in requests — it's a profile name, not a raw model ID.
 
-The model receives all registered tools automatically on every request. Tool handlers can be sync or async — the registry handles both.
+**Agent loop:** runs up to `max_tool_rounds` (default 10) iterations. Each round: call the LLM → if tool calls are present, resolve them → append results → repeat. No tools are registered server-side yet (see below), so any tool call the model makes gets a graceful `"not implemented"` result — this keeps the loop functional as tools get added later.
 
-**Home tools** (`tools/home.py`): `control_light`, `set_thermostat`, `lock_door`, `get_home_status` — all stubs awaiting real Home Assistant / python-kasa integration.
+**Deploying changes:** edit the function source under `supabase/functions/<name>/index.ts`, then redeploy via the Supabase MCP `deploy_edge_function` tool (or `supabase functions deploy <name>` with the CLI) — there's no separate build step.
 
-**Communication tools** (`tools/communication.py`): `send_text`, `make_call`, `get_contacts` — stubs wired for Twilio (env vars: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`).
+---
 
-**Pi deployment:**
-```bash
-sudo cp server/caden-api.service /etc/systemd/system/
-sudo systemctl enable --now caden-api
-```
-The service file assumes the repo is at `/home/pi/caden` and the venv at `/home/pi/caden/server/venv`.
+## Backend (`server/` — optional, self-hosted alternative)
+
+A Python + FastAPI implementation of the same chat-completions API exists in `server/` for anyone who later wants to self-host on a Raspberry Pi or other always-on hardware instead of relying on Supabase Edge Functions. **It is not currently deployed anywhere.** It has its own key-pool logic (`providers/key_cycler.py`, optionally synced from the same `caden_api_keys` table via `keys_sync.py`), its own tool registry (`tools/home.py`, `tools/communication.py` — still stubs), and a systemd unit (`server/caden-api.service`) for running on a Pi. See the code and its docstrings if reviving this path; the Edge Functions above are the source of truth for current behavior.
 
 ---
 
 ## What's not wired up yet
 
-- The frontend makes no real API calls — it's a static demo with a JS state machine. The next step is pointing the canvas input bar at `http://<pi-ip>:8000/v1/chat/completions`.
+- The frontend makes no real API calls — it's a static demo with a JS state machine. The next step is pointing the canvas input bar at `https://lrjiopczasvcrhglweth.supabase.co/functions/v1/chat`, sending the anon key as the bearer token.
 - No system prompt defining Caden's personality is set.
-- Home and communication tools are stubs.
-- No streaming (`stream: true`) support in the chat router.
+- Home and communication tools aren't ported to the Edge Function yet — the agent loop supports tool calls, but no tools are registered.
+- No streaming (`stream: true`) support in the chat function.
+- No real Gemini-based voice pipeline yet — the Gemini key pool is provisioned but only used for text chat fallback so far.
