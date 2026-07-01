@@ -66,6 +66,7 @@
     width: 200px;
     height: 200px;
     flex: 0 0 auto;
+    position: relative;
   }
 
   .orb-core {
@@ -76,16 +77,58 @@
     border: 4px solid #000;
     animation: caden-morph 18s cubic-bezier(0.45, 0.05, 0.2, 1) infinite;
     will-change: border-radius;
+    opacity: 1;
+    transition: opacity 0.35s ease;
   }
 
   /* State: listening — morph picks up pace */
   .orb.is-listening .orb-core { animation-duration: 9s; }
 
-  /* State: thinking — rapid morph signals processing */
-  .orb.is-thinking  .orb-core { animation-duration: 4s; }
-
   /* State: speaking — settles back to calm */
   .orb.is-speaking  .orb-core { animation-duration: 18s; }
+
+  /* ---- Thinking: split into orbiting orbs that liquify back into one ---- */
+  /* The single core dissolves; a cluster of terracotta metaballs flies apart into
+     orbit, then meshes back together into one unified orb — on a loop. */
+  .think-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+    overflow: visible;
+  }
+
+  .orb.is-thinking .orb-core { opacity: 0; }
+  .orb.is-thinking .think-svg { opacity: 1; }
+
+  /* Metaball fill (terracotta) sits inside the dilated black edge → hard outline */
+  .think-fill .blob { fill: #C46A4B; }
+  .think-edge .blob { fill: #000; }
+
+  /* The whole cluster slowly orbits around the centre — driven by the SMIL
+     <animateTransform> in the markup (rotates around the exact user-space origin,
+     which CSS transform-origin can't pin down reliably across engines). */
+
+  /* Each blob flies out along its spoke, then retracts + swells back to centre.
+     When retracted they overlap into one big unified orb; the goo filter fuses
+     them so the split and re-merge read as liquid. */
+  .blob {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: think-spread 3.2s ease-in-out infinite;
+  }
+
+  /* Idle CPU: freeze the cluster whenever we're not thinking */
+  .orb:not(.is-thinking) .think-blobs,
+  .orb:not(.is-thinking) .blob { animation-play-state: paused; }
+
+  @keyframes think-spread {
+    0%,   100% { transform: translateY(0)     scale(2.2); }  /* unified orb */
+    45%,   60% { transform: translateY(-46px) scale(1);   }  /* orbiting droplet */
+  }
 
   /* ---- Listening bars ---- */
   .listen-bars {
@@ -325,6 +368,37 @@
   <div class="orb-wrap" id="orbWrap">
     <div class="orb" id="orb">
       <div class="orb-core"></div>
+      <svg class="think-svg" viewBox="-100 -100 200 200" aria-hidden="true">
+        <defs>
+          <!-- Gooey metaball filter: blur + alpha threshold fuses nearby blobs.
+               filterUnits pins the region to the whole canvas so blobs stay
+               visible as they orbit outward (default bbox region would clip them). -->
+          <filter id="caden-goo-fill" filterUnits="userSpaceOnUse"
+                  x="-100" y="-100" width="200" height="200">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+            <feColorMatrix in="b" type="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9"/>
+          </filter>
+          <!-- Same fusion, then dilated + blackened → a hard black outline behind -->
+          <filter id="caden-goo-edge" filterUnits="userSpaceOnUse"
+                  x="-100" y="-100" width="200" height="200">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+            <feColorMatrix in="b" type="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" result="goo"/>
+            <feMorphology in="goo" operator="dilate" radius="3" result="d"/>
+            <feColorMatrix in="d" type="matrix"
+              values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/>
+          </filter>
+        </defs>
+        <g class="think-blobs think-edge" filter="url(#caden-goo-edge)">
+          <animateTransform attributeName="transform" attributeType="XML"
+            type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/>
+        </g>
+        <g class="think-blobs think-fill" filter="url(#caden-goo-fill)">
+          <animateTransform attributeName="transform" attributeType="XML"
+            type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/>
+        </g>
+      </svg>
     </div>
     <div class="listen-bars" id="listenBars">
       <div class="bar"></div>
@@ -409,6 +483,34 @@
   const dismissBtn   = document.getElementById('dismissBtn');
   const demoControls = document.getElementById('demoControls');
   const listenBars   = document.getElementById('listenBars');
+
+  // Build the thinking cluster: N spokes, each with a terracotta fill blob and a
+  // matching (blackened, dilated) edge blob so the metaballs get a hard outline.
+  function buildThinkCluster() {
+    const SVG = 'http://www.w3.org/2000/svg';
+    const edge = document.querySelector('.think-edge');
+    const fill = document.querySelector('.think-fill');
+    if (!edge || !fill) return;
+    const radii = [24, 21, 26, 22, 25];   // slight variation reads as organic
+    const N = radii.length;
+    for (let i = 0; i < N; i++) {
+      const angle = (360 / N) * i;
+      const delay = (i * 0.14).toFixed(2) + 's';
+      for (const layer of [edge, fill]) {
+        const spoke = document.createElementNS(SVG, 'g');
+        spoke.setAttribute('transform', `rotate(${angle})`);
+        const c = document.createElementNS(SVG, 'circle');
+        c.setAttribute('class', 'blob');
+        c.setAttribute('cx', '0');
+        c.setAttribute('cy', '0');
+        c.setAttribute('r', radii[i]);
+        c.style.animationDelay = delay;
+        spoke.appendChild(c);
+        layer.appendChild(spoke);
+      }
+    }
+  }
+  buildThinkCluster();
 
   const STATES = ['idle', 'listening', 'thinking', 'speaking'];
 

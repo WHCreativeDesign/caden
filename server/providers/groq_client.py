@@ -21,7 +21,8 @@ async def chat(
 ):
     model = config.MODELS[profile]["groq"]
 
-    for attempt in range(retries * len(config.GROQ_KEYS)):
+    attempts = retries * max(_cycler.count(), 1)
+    for attempt in range(attempts):
         key = _cycler.get()
         client = _client(key)
         try:
@@ -37,7 +38,7 @@ async def chat(
                 e.response.headers.get("retry-after", 60) or 60
             )
             _cycler.mark_limited(key, retry_after)
-            if attempt == retries * len(config.GROQ_KEYS) - 1:
+            if attempt == attempts - 1:
                 raise
             await asyncio.sleep(0.1)
 
