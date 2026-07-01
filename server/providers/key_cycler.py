@@ -6,23 +6,50 @@ class KeyCycler:
     """
     Round-robin key pool with automatic rate-limit backoff.
     Thread-safe — safe to call from concurrent async workers.
+
+    The pool can start empty and be filled/refreshed at runtime via `sync()`,
+    which is how keys loaded from Supabase get merged in without a restart.
     """
 
     def __init__(self, keys: list[str], provider: str):
-        if not keys:
-            raise ValueError(
-                f"No API keys configured for {provider}. "
-                f"Add them to .env as {provider.upper()}_API_KEYS=key1,key2,..."
-            )
         self.provider = provider
-        self._keys = list(keys)
         self._lock = threading.Lock()
+        self._keys: list[str] = []
         self._index = 0
         # key → timestamp when it becomes available again
         self._rate_limited: dict[str, float] = {}
+        self.sync(keys or [])
+
+    def sync(self, keys: list[str]):
+        """Replace the pool with `keys`, preserving rate-limit state for survivors."""
+        with self._lock:
+            deduped: list[str] = []
+            seen: set[str] = set()
+            for k in keys:
+                k = k.strip()
+                if k and k not in seen:
+                    seen.add(k)
+                    deduped.append(k)
+            self._keys = deduped
+            # Drop backoff timers for keys no longer in the pool.
+            self._rate_limited = {
+                k: t for k, t in self._rate_limited.items() if k in seen
+            }
+            if self._keys:
+                self._index %= len(self._keys)
+
+    def count(self) -> int:
+        with self._lock:
+            return len(self._keys)
 
     def get(self) -> str:
         with self._lock:
+            if not self._keys:
+                raise RuntimeError(
+                    f"No API keys available for {self.provider}. "
+                    f"Add them to the Supabase '{self.provider}' pool or to "
+                    f"{self.provider.upper()}_API_KEYS in .env."
+                )
             now = time.time()
             for _ in range(len(self._keys)):
                 key = self._keys[self._index % len(self._keys)]
