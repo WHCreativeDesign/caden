@@ -1,16 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="Caden — a personal AI. Composed, precise, always present." />
-<meta name="theme-color" content="#060A0F" />
-<title>Caden</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<script>document.documentElement.classList.add('js');</script>
-<style>
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="UTF-8" /&gt;
+&lt;meta name="viewport" content="width=device-width, initial-scale=1" /&gt;
+&lt;meta name="description" content="Caden — a personal AI. Composed, precise, always present." /&gt;
+&lt;meta name="theme-color" content="#060A0F" /&gt;
+&lt;title&gt;Caden&lt;/title&gt;
+&lt;link rel="preconnect" href="https://fonts.googleapis.com" /&gt;
+&lt;link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /&gt;
+&lt;link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet" /&gt;
+&lt;script&gt;document.documentElement.classList.add('js');&lt;/script&gt;
+&lt;style&gt;
   /* ── Foundation ──────────────────────────────────────────────────────────── */
   :root {
     --bg:        #060A0F;
@@ -759,113 +759,113 @@
     .tw { opacity: 1 !important; }
     * { transition-duration: 0.001s !important; }
   }
-</style>
-</head>
-<body>
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
 
-<header class="topbar boot boot-1">
-  <div class="wordmark">CADEN<span>.</span></div>
-  <div class="controls">
-    <div class="seg" role="tablist" aria-label="View mode">
-      <button id="modeCanvasBtn" class="on" role="tab" aria-selected="true">Canvas</button>
-      <button id="modeChatBtn" role="tab" aria-selected="false">Chat</button>
-    </div>
-    <select class="agent-select" id="agentSelect" aria-label="Agent">
-      <option value="caden">Caden</option>
-      <option value="analyst">Analyst</option>
-      <option value="scout">Scout</option>
-    </select>
-    <button class="ghost-btn" id="newChatBtn" title="Start a new conversation">New</button>
-  </div>
-</header>
+&lt;header class="topbar boot boot-1"&gt;
+  &lt;div class="wordmark"&gt;CADEN&lt;span&gt;.&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="controls"&gt;
+    &lt;div class="seg" role="tablist" aria-label="View mode"&gt;
+      &lt;button id="modeCanvasBtn" class="on" role="tab" aria-selected="true"&gt;Canvas&lt;/button&gt;
+      &lt;button id="modeChatBtn" role="tab" aria-selected="false"&gt;Chat&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;select class="agent-select" id="agentSelect" aria-label="Agent"&gt;
+      &lt;option value="caden"&gt;Caden&lt;/option&gt;
+      &lt;option value="analyst"&gt;Analyst&lt;/option&gt;
+      &lt;option value="scout"&gt;Scout&lt;/option&gt;
+    &lt;/select&gt;
+    &lt;button class="ghost-btn" id="newChatBtn" title="Start a new conversation"&gt;New&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/header&gt;
 
-<!-- Canvas mode -->
-<main class="stage" id="stage">
-  <div class="orb-wrap boot-orb" id="orbWrap">
-    <div class="orb" id="orb">
-      <div class="orb-halo"></div>
-      <div class="orb-ring"></div>
-      <div class="orb-ring r2"></div>
-      <div class="orb-core"></div>
-      <svg class="think-svg" viewBox="-100 -100 200 200" aria-hidden="true">
-        <defs>
-          <radialGradient id="thinkGrad" cx="38%" cy="34%" r="80%">
-            <stop offset="0%"  stop-color="#F2FCFF"/>
-            <stop offset="38%" stop-color="#7FDFF0"/>
-            <stop offset="75%" stop-color="#2E93AC"/>
-            <stop offset="100%" stop-color="#0C3C4D"/>
-          </radialGradient>
-          <!-- Gooey metaball filter: blur + alpha threshold fuses nearby blobs.
+&lt;!-- Canvas mode --&gt;
+&lt;main class="stage" id="stage"&gt;
+  &lt;div class="orb-wrap boot-orb" id="orbWrap"&gt;
+    &lt;div class="orb" id="orb"&gt;
+      &lt;div class="orb-halo"&gt;&lt;/div&gt;
+      &lt;div class="orb-ring"&gt;&lt;/div&gt;
+      &lt;div class="orb-ring r2"&gt;&lt;/div&gt;
+      &lt;div class="orb-core"&gt;&lt;/div&gt;
+      &lt;svg class="think-svg" viewBox="-100 -100 200 200" aria-hidden="true"&gt;
+        &lt;defs&gt;
+          &lt;radialGradient id="thinkGrad" cx="38%" cy="34%" r="80%"&gt;
+            &lt;stop offset="0%"  stop-color="#F2FCFF"/&gt;
+            &lt;stop offset="38%" stop-color="#7FDFF0"/&gt;
+            &lt;stop offset="75%" stop-color="#2E93AC"/&gt;
+            &lt;stop offset="100%" stop-color="#0C3C4D"/&gt;
+          &lt;/radialGradient&gt;
+          &lt;!-- Gooey metaball filter: blur + alpha threshold fuses nearby blobs.
                filterUnits pins the region to the whole canvas so blobs stay
-               visible as they orbit outward. -->
-          <filter id="caden-goo" filterUnits="userSpaceOnUse"
-                  x="-100" y="-100" width="200" height="200">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
-            <feColorMatrix in="b" type="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9"/>
-          </filter>
-          <!-- Same fusion, then softened and tinted — a luminous aura behind -->
-          <filter id="caden-goo-glow" filterUnits="userSpaceOnUse"
-                  x="-100" y="-100" width="200" height="200">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
-            <feColorMatrix in="b" type="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" result="goo"/>
-            <feGaussianBlur in="goo" stdDeviation="10" result="soft"/>
-            <feColorMatrix in="soft" type="matrix"
-              values="0 0 0 0 0.38  0 0 0 0 0.85  0 0 0 0 0.91  0 0 0 0.55 0"/>
-          </filter>
-        </defs>
-        <g class="think-blobs think-glow" filter="url(#caden-goo-glow)">
-          <animateTransform attributeName="transform" attributeType="XML"
-            type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/>
-        </g>
-        <g class="think-blobs think-fill" filter="url(#caden-goo)">
-          <animateTransform attributeName="transform" attributeType="XML"
-            type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/>
-        </g>
-      </svg>
-    </div>
-    <div class="listen-bars" id="listenBars">
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-      <div class="bar"></div>
-    </div>
-    <div class="think-ticker" id="thinkTicker" aria-live="polite"></div>
-  </div>
+               visible as they orbit outward. --&gt;
+          &lt;filter id="caden-goo" filterUnits="userSpaceOnUse"
+                  x="-100" y="-100" width="200" height="200"&gt;
+            &lt;feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/&gt;
+            &lt;feColorMatrix in="b" type="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9"/&gt;
+          &lt;/filter&gt;
+          &lt;!-- Same fusion, then softened and tinted — a luminous aura behind --&gt;
+          &lt;filter id="caden-goo-glow" filterUnits="userSpaceOnUse"
+                  x="-100" y="-100" width="200" height="200"&gt;
+            &lt;feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/&gt;
+            &lt;feColorMatrix in="b" type="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" result="goo"/&gt;
+            &lt;feGaussianBlur in="goo" stdDeviation="10" result="soft"/&gt;
+            &lt;feColorMatrix in="soft" type="matrix"
+              values="0 0 0 0 0.38  0 0 0 0 0.85  0 0 0 0 0.91  0 0 0 0.55 0"/&gt;
+          &lt;/filter&gt;
+        &lt;/defs&gt;
+        &lt;g class="think-blobs think-glow" filter="url(#caden-goo-glow)"&gt;
+          &lt;animateTransform attributeName="transform" attributeType="XML"
+            type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/&gt;
+        &lt;/g&gt;
+        &lt;g class="think-blobs think-fill" filter="url(#caden-goo)"&gt;
+          &lt;animateTransform attributeName="transform" attributeType="XML"
+            type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/&gt;
+        &lt;/g&gt;
+      &lt;/svg&gt;
+    &lt;/div&gt;
+    &lt;div class="listen-bars" id="listenBars"&gt;
+      &lt;div class="bar"&gt;&lt;/div&gt;&lt;div class="bar"&gt;&lt;/div&gt;&lt;div class="bar"&gt;&lt;/div&gt;
+      &lt;div class="bar"&gt;&lt;/div&gt;&lt;div class="bar"&gt;&lt;/div&gt;&lt;div class="bar"&gt;&lt;/div&gt;
+      &lt;div class="bar"&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class="think-ticker" id="thinkTicker" aria-live="polite"&gt;&lt;/div&gt;
+  &lt;/div&gt;
 
-  <!-- Answer panel -->
-  <div class="answer-panel" id="answerPanel">
-    <div class="answer-card">
-      <div class="answer-eyebrow" id="answerLabel">Caden</div>
-      <div id="answerThink"></div>
-      <div class="answer-body" id="answerBody"></div>
-      <div class="answer-meta">
-        <span class="answer-meta-label" id="answerMetaLabel"></span>
-        <div class="answer-actions">
-          <button class="icon-btn" title="Copy" id="copyBtn" aria-label="Copy answer">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          </button>
-          <button class="icon-btn" title="Dismiss" id="dismissBtn" aria-label="Dismiss answer">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</main>
+  &lt;!-- Answer panel --&gt;
+  &lt;div class="answer-panel" id="answerPanel"&gt;
+    &lt;div class="answer-card"&gt;
+      &lt;div class="answer-eyebrow" id="answerLabel"&gt;Caden&lt;/div&gt;
+      &lt;div id="answerThink"&gt;&lt;/div&gt;
+      &lt;div class="answer-body" id="answerBody"&gt;&lt;/div&gt;
+      &lt;div class="answer-meta"&gt;
+        &lt;span class="answer-meta-label" id="answerMetaLabel"&gt;&lt;/span&gt;
+        &lt;div class="answer-actions"&gt;
+          &lt;button class="icon-btn" title="Copy" id="copyBtn" aria-label="Copy answer"&gt;
+            &lt;svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"&gt;&lt;rect x="9" y="9" width="12" height="12" rx="2"/&gt;&lt;path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/&gt;&lt;/svg&gt;
+          &lt;/button&gt;
+          &lt;button class="icon-btn" title="Dismiss" id="dismissBtn" aria-label="Dismiss answer"&gt;
+            &lt;svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"&gt;&lt;path d="M6 6l12 12M18 6L6 18"/&gt;&lt;/svg&gt;
+          &lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/main&gt;
 
-<!-- Chat mode -->
-<section class="chat-view" id="chatView" aria-label="Conversation">
-  <div class="chat-scroll" id="chatScroll">
-    <div class="chat-empty" id="chatEmpty">No conversation yet</div>
-  </div>
-</section>
+&lt;!-- Chat mode --&gt;
+&lt;section class="chat-view" id="chatView" aria-label="Conversation"&gt;
+  &lt;div class="chat-scroll" id="chatScroll"&gt;
+    &lt;div class="chat-empty" id="chatEmpty"&gt;No conversation yet&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/section&gt;
 
-<div class="state-label boot boot-2" id="stateLabel">standing by</div>
+&lt;div class="state-label boot boot-2" id="stateLabel"&gt;standing by&lt;/div&gt;
 
-<!-- Input -->
-<div class="input-bar boot boot-3">
-  <input
+&lt;!-- Input --&gt;
+&lt;div class="input-bar boot boot-3"&gt;
+  &lt;input
     class="input-field"
     id="inputField"
     type="text"
@@ -873,25 +873,25 @@
     autocomplete="off"
     spellcheck="false"
     aria-label="Message Caden"
-  />
-  <button class="input-send-btn" id="sendBtn" title="Send" aria-label="Send">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
-  </button>
-  <button class="input-mic-btn" id="micBtn" title="Voice input" aria-label="Voice input">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="9" y="2.5" width="6" height="11" rx="3"/>
-      <path d="M5.5 11a6.5 6.5 0 0 0 13 0"/>
-      <path d="M12 17.5V21"/>
-    </svg>
-  </button>
-</div>
+  /&gt;
+  &lt;button class="input-send-btn" id="sendBtn" title="Send" aria-label="Send"&gt;
+    &lt;svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"&gt;&lt;path d="M5 12h14"/&gt;&lt;path d="M13 6l6 6-6 6"/&gt;&lt;/svg&gt;
+  &lt;/button&gt;
+  &lt;button class="input-mic-btn" id="micBtn" title="Voice input" aria-label="Voice input"&gt;
+    &lt;svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"&gt;
+      &lt;rect x="9" y="2.5" width="6" height="11" rx="3"/&gt;
+      &lt;path d="M5.5 11a6.5 6.5 0 0 0 13 0"/&gt;
+      &lt;path d="M12 17.5V21"/&gt;
+    &lt;/svg&gt;
+  &lt;/button&gt;
+&lt;/div&gt;
 
-<div class="telemetry boot boot-3" id="telemetry"></div>
+&lt;div class="telemetry boot boot-3" id="telemetry"&gt;&lt;/div&gt;
 
-<div class="grain" aria-hidden="true"></div>
+&lt;div class="grain" aria-hidden="true"&gt;&lt;/div&gt;
 
-<script>
-(() => {
+&lt;script&gt;
+(() =&gt; {
   'use strict';
 
   // ── Backend ─────────────────────────────────────────────────────────────────
@@ -907,7 +907,7 @@
   const STORAGE_KEY = 'caden.session.v2';
 
   // ── Elements ────────────────────────────────────────────────────────────────
-  const $ = (id) => document.getElementById(id);
+  const $ = (id) =&gt; document.getElementById(id);
   const orb = $('orb'), orbWrap = $('orbWrap');
   const answerPanel = $('answerPanel'), answerBody = $('answerBody');
   const answerLabel = $('answerLabel'), answerMetaLabel = $('answerMetaLabel');
@@ -928,7 +928,7 @@
     const SVG = 'http://www.w3.org/2000/svg';
     const layers = [document.querySelector('.think-glow'), document.querySelector('.think-fill')];
     const radii = [24, 21, 26, 22, 25];
-    for (let i = 0; i < radii.length; i++) {
+    for (let i = 0; i &lt; radii.length; i++) {
       const angle = (360 / radii.length) * i;
       const delay = (i * 0.14).toFixed(2) + 's';
       for (const layer of layers) {
@@ -954,10 +954,10 @@
   let inFlight = false;
   let lastMs = null;
 
-  const sessId = (() => {
+  const sessId = (() =&gt; {
     const buf = new Uint8Array(3);
     crypto.getRandomValues(buf);
-    return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+    return Array.from(buf, (b) =&gt; b.toString(16).padStart(2, '0')).join('');
   })();
 
   function save() {
@@ -1079,12 +1079,12 @@
     wrap.className = 'msg-assistant' + (err ? ' error' : '');
 
     let capsule = null;
-    if ((thinking && thinking.length) || (steps && steps.length)) {
+    if ((thinking &amp;&amp; thinking.length) || (steps &amp;&amp; steps.length)) {
       capsule = buildCapsule({ live: false });
-      (thinking || []).forEach((l) => capsule.addLine(l));
-      (steps || []).forEach((s) => capsule.addToolStep(s));
+      (thinking || []).forEach((l) =&gt; capsule.addLine(l));
+      (steps || []).forEach((s) =&gt; capsule.addToolStep(s));
       capsule.el.open = !!capsuleOpen;
-      if (meta && meta.seconds != null) {
+      if (meta &amp;&amp; meta.seconds != null) {
         capsule.finish(meta.seconds, (thinking?.length || 0) + (steps?.length || 0));
         capsule.el.open = !!capsuleOpen;
       }
@@ -1112,7 +1112,7 @@
 
   function renderLog() {
     // Rebuild the chat view from the persisted log (page load / new chat).
-    [...chatScroll.querySelectorAll('.turn')].forEach((el) => el.remove());
+    [...chatScroll.querySelectorAll('.turn')].forEach((el) =&gt; el.remove());
     chatEmpty.style.display = log.length ? 'none' : '';
     for (const entry of log) {
       if (entry.role === 'user') addUserTurn(entry.text);
@@ -1127,13 +1127,13 @@
     el.innerHTML = '';
     const t = document.createElement('span');
     t.className = 'typing';
-    t.innerHTML = '<i></i><i></i><i></i>';
+    t.innerHTML = '&lt;i&gt;&lt;/i&gt;&lt;i&gt;&lt;/i&gt;&lt;i&gt;&lt;/i&gt;';
     el.appendChild(t);
   }
 
   // Reveal text word-by-word with a trailing caret — Caden speaking, not pasting.
   function typewriter(el, text) {
-    return new Promise((resolve) => {
+    return new Promise((resolve) =&gt; {
       el.textContent = '';
       if (reducedMotion || !text) { el.textContent = text || ''; resolve(); return; }
       const tokens = text.match(/\S+\s*/g) || [text];
@@ -1142,16 +1142,16 @@
       caret.className = 'caret';
       el.appendChild(caret);
       let i = 0;
-      const step = () => {
-        if (i >= tokens.length) { caret.remove(); resolve(); return; }
+      const step = () =&gt; {
+        if (i &gt;= tokens.length) { caret.remove(); resolve(); return; }
         let chunk = '';
-        for (let k = 0; k < per && i < tokens.length; k++, i++) chunk += tokens[i];
+        for (let k = 0; k &lt; per &amp;&amp; i &lt; tokens.length; k++, i++) chunk += tokens[i];
         const span = document.createElement('span');
         span.className = 'tw';
         span.textContent = chunk;
         el.insertBefore(span, caret);
         if (mode === 'chat') scrollChat();
-        setTimeout(() => requestAnimationFrame(step), 18 + Math.random() * 24);
+        setTimeout(() =&gt; requestAnimationFrame(step), 18 + Math.random() * 24);
       };
       step();
     });
@@ -1174,7 +1174,7 @@
   }
 
   function prettyError(data) {
-    const e = data && data.error;
+    const e = data &amp;&amp; data.error;
     if (!e) return '';
     if (typeof e === 'string') return e;
     if (e.error) return [e.error, e.groq, e.gemini].filter(Boolean).join(' — ');
@@ -1210,12 +1210,12 @@
         const plan = await callApi({ phase: 'plan', agent, messages: history });
         const lines = plan.caden?.thinking || [];
         planText = lines.join('\n');
-        lines.forEach((line, i) => {
-          setTimeout(() => {
+        lines.forEach((line, i) =&gt; {
+          setTimeout(() =&gt; {
             if (!inFlight) return;
             thinkingLines.push(line);
             liveCapsule.addLine(line);
-            if (mode === 'canvas' && currentState === 'thinking') {
+            if (mode === 'canvas' &amp;&amp; currentState === 'thinking') {
               thinkTicker.innerHTML = '';
               const t = document.createElement('span');
               t.className = 'tick-line';
@@ -1239,8 +1239,8 @@
       // Make sure every plan line is present (timers may still be pending),
       // then append tool steps and settle the capsule.
       const planLines = planText ? planText.split('\n').filter(Boolean) : [];
-      planLines.slice(thinkingLines.length).forEach((l) => { thinkingLines.push(l); liveCapsule.addLine(l); });
-      steps.forEach((s) => liveCapsule.addToolStep(s));
+      planLines.slice(thinkingLines.length).forEach((l) =&gt; { thinkingLines.push(l); liveCapsule.addLine(l); });
+      steps.forEach((s) =&gt; liveCapsule.addToolStep(s));
       const stepCount = thinkingLines.length + steps.length;
       if (stepCount) liveCapsule.finish(seconds, stepCount);
       else liveCapsule.el.remove();
@@ -1260,8 +1260,8 @@
       answerThink.innerHTML = '';
       if (stepCount) {
         const c = buildCapsule({ live: false });
-        thinkingLines.forEach((l) => c.addLine(l));
-        steps.forEach((s) => c.addToolStep(s));
+        thinkingLines.forEach((l) =&gt; c.addLine(l));
+        steps.forEach((s) =&gt; c.addToolStep(s));
         c.finish(seconds, stepCount);
         answerThink.appendChild(c.el);
       }
@@ -1303,7 +1303,7 @@
     }
   }
 
-  // ── Mode & agent controls ───────────────────────────────────────────────────
+  // ── Mode &amp; agent controls ───────────────────────────────────────────────────
   function setMode(m) {
     mode = m;
     document.body.classList.toggle('mode-chat', m === 'chat');
@@ -1315,16 +1315,16 @@
     save();
   }
 
-  modeCanvasBtn.addEventListener('click', () => setMode('canvas'));
-  modeChatBtn.addEventListener('click', () => setMode('chat'));
+  modeCanvasBtn.addEventListener('click', () =&gt; setMode('canvas'));
+  modeChatBtn.addEventListener('click', () =&gt; setMode('chat'));
 
-  agentSelect.addEventListener('change', () => {
+  agentSelect.addEventListener('change', () =&gt; {
     agent = agentSelect.value;
     updateTelemetry();
     save();
   });
 
-  newChatBtn.addEventListener('click', () => {
+  newChatBtn.addEventListener('click', () =&gt; {
     history = [];
     log = [];
     lastMs = null;
@@ -1343,11 +1343,11 @@
     ask(val);
   }
   sendBtn.addEventListener('click', sendQuery);
-  inputField.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendQuery(); });
+  inputField.addEventListener('keydown', (e) =&gt; { if (e.key === 'Enter') sendQuery(); });
 
-  dismissBtn.addEventListener('click', () => setState('idle'));
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard?.writeText(answerBody.textContent).catch(() => {});
+  dismissBtn.addEventListener('click', () =&gt; setState('idle'));
+  copyBtn.addEventListener('click', () =&gt; {
+    navigator.clipboard?.writeText(answerBody.textContent).catch(() =&gt; {});
   });
 
   // ── Voice (browser speech-to-text; a dedicated pipeline can replace this) ──
@@ -1360,25 +1360,25 @@
     recognizer.interimResults = false;
     recognizer.maxAlternatives = 1;
 
-    recognizer.addEventListener('result', (e) => {
+    recognizer.addEventListener('result', (e) =&gt; {
       inputField.value = e.results[0][0].transcript;
     });
-    recognizer.addEventListener('end', () => {
+    recognizer.addEventListener('end', () =&gt; {
       if (currentState !== 'listening') return;
       const said = inputField.value.trim();
       inputField.value = '';
       if (said) ask(said);
       else setState('idle');
     });
-    recognizer.addEventListener('error', () => {
+    recognizer.addEventListener('error', () =&gt; {
       if (currentState === 'listening') setState('idle');
     });
   }
 
-  micBtn.addEventListener('click', () => {
+  micBtn.addEventListener('click', () =&gt; {
     if (!recognizer) {
       inputField.placeholder = 'Voice needs Chrome, Edge or Safari — type instead';
-      setTimeout(() => { inputField.placeholder = 'Message Caden'; }, 3500);
+      setTimeout(() =&gt; { inputField.placeholder = 'Message Caden'; }, 3500);
       return;
     }
     if (currentState === 'listening') {
@@ -1398,9 +1398,11 @@
   setState('idle');
   updateTelemetry();
 
-  // Play the entrance once the first frame is ready.
-  requestAnimationFrame(() => document.body.classList.add('booted'));
+  // Play the entrance once the first frame is ready. Added to &lt;html&gt; (not
+  // &lt;body&gt;) so it lands on the same element as the 'js' class — the CSS
+  // reveal selector is `.js.booted .boot`, which needs both classes on one node.
+  requestAnimationFrame(() =&gt; document.documentElement.classList.add('booted'));
 })();
-</script>
-</body>
-</html>
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
