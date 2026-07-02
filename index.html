@@ -233,6 +233,14 @@
   }
   body.mode-chat .stage { opacity: 0; transform: scale(0.99); pointer-events: none; }
 
+  /* Scales/pans to fit the orb + all open windows — driven by fit_canvas */
+  .canvas-viewport {
+    position: absolute;
+    inset: 0;
+    transform-origin: 0 0;
+    transition: transform 0.9s var(--ease-inout);
+  }
+
   /* The orb — Caden itself. Positioned in viewport %, movable by tool. */
   .orb-wrap {
     position: absolute;
@@ -830,52 +838,54 @@
 
 <!-- Canvas -->
 <main class="stage" id="stage">
-  <div class="orb-wrap boot-orb" id="orbWrap">
-    <div class="orb" id="orb">
-      <div class="orb-halo"></div>
-      <div class="orb-core"></div>
-      <svg class="think-svg" viewBox="-100 -100 200 200" aria-hidden="true">
-        <defs>
-          <radialGradient id="thinkGrad" cx="42%" cy="36%" r="82%">
-            <stop offset="0%"  stop-color="#FBFDFF"/>
-            <stop offset="42%" stop-color="#EAF1FC"/>
-            <stop offset="76%" stop-color="#CFDAF6"/>
-            <stop offset="100%" stop-color="#B4C1EE"/>
-          </radialGradient>
-          <filter id="caden-goo" filterUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
-            <feColorMatrix in="b" type="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9"/>
-          </filter>
-          <filter id="caden-goo-glow" filterUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
-            <feColorMatrix in="b" type="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" result="goo"/>
-            <feGaussianBlur in="goo" stdDeviation="10" result="soft"/>
-            <feColorMatrix in="soft" type="matrix"
-              values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0"/>
-          </filter>
-        </defs>
-        <g class="think-blobs think-glow" filter="url(#caden-goo-glow)">
-          <animateTransform attributeName="transform" attributeType="XML"
-            type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/>
-        </g>
-        <g class="think-blobs think-fill" filter="url(#caden-goo)">
-          <animateTransform attributeName="transform" attributeType="XML"
-            type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/>
-        </g>
-      </svg>
+  <div class="canvas-viewport" id="canvasViewport">
+    <div class="orb-wrap boot-orb" id="orbWrap">
+      <div class="orb" id="orb">
+        <div class="orb-halo"></div>
+        <div class="orb-core"></div>
+        <svg class="think-svg" viewBox="-100 -100 200 200" aria-hidden="true">
+          <defs>
+            <radialGradient id="thinkGrad" cx="42%" cy="36%" r="82%">
+              <stop offset="0%"  stop-color="#FBFDFF"/>
+              <stop offset="42%" stop-color="#EAF1FC"/>
+              <stop offset="76%" stop-color="#CFDAF6"/>
+              <stop offset="100%" stop-color="#B4C1EE"/>
+            </radialGradient>
+            <filter id="caden-goo" filterUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+              <feColorMatrix in="b" type="matrix"
+                values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9"/>
+            </filter>
+            <filter id="caden-goo-glow" filterUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+              <feColorMatrix in="b" type="matrix"
+                values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" result="goo"/>
+              <feGaussianBlur in="goo" stdDeviation="10" result="soft"/>
+              <feColorMatrix in="soft" type="matrix"
+                values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0"/>
+            </filter>
+          </defs>
+          <g class="think-blobs think-glow" filter="url(#caden-goo-glow)">
+            <animateTransform attributeName="transform" attributeType="XML"
+              type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/>
+          </g>
+          <g class="think-blobs think-fill" filter="url(#caden-goo)">
+            <animateTransform attributeName="transform" attributeType="XML"
+              type="rotate" from="0 0 0" to="360 0 0" dur="5.5s" repeatCount="indefinite"/>
+          </g>
+        </svg>
+      </div>
+      <div class="listen-bars" id="listenBars">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div>
+      </div>
+      <div class="think-ticker" id="thinkTicker" aria-live="polite"></div>
     </div>
-    <div class="listen-bars" id="listenBars">
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-      <div class="bar"></div>
-    </div>
-    <div class="think-ticker" id="thinkTicker" aria-live="polite"></div>
-  </div>
 
-  <!-- Windows Caden opens live here -->
-  <div class="win-layer" id="winLayer"></div>
+    <!-- Windows Caden opens live here -->
+    <div class="win-layer" id="winLayer"></div>
+  </div>
 
   <!-- Answer panel -->
   <div class="answer-panel" id="answerPanel">
@@ -951,6 +961,7 @@
   // ── Elements ────────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
   const orb = $('orb'), orbWrap = $('orbWrap'), winLayer = $('winLayer');
+  const canvasViewport = $('canvasViewport');
   const answerPanel = $('answerPanel'), answerBody = $('answerBody');
   const answerLabel = $('answerLabel'), answerMetaLabel = $('answerMetaLabel');
   const answerThink = $('answerThink');
@@ -1091,8 +1102,9 @@
   let agent = 'caden';
   let history = [];        // OpenAI messages (server adds the system prompt)
   let log = [];            // chat render log
-  let windows = [];        // live canvas windows: {id,title,x,y,width,text,html,kind,task}
+  let windows = [];        // live canvas windows: {id,title,x,y,width,h,text,html,kind,task}
   let orbPos = { x: 50, y: 42, custom: false };
+  let canvasZoom = { scale: 1, tx: 0, ty: 0 };
   let currentState = 'idle';
   let inFlight = false;
   let lastMs = null;
@@ -1106,7 +1118,7 @@
 
   function save() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, agent, history, log, windows, orbPos }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, agent, history, log, windows, orbPos, canvasZoom }));
     } catch { /* persistence is best-effort */ }
   }
   function load() {
@@ -1120,6 +1132,7 @@
       if (Array.isArray(s.log)) log = s.log;
       if (Array.isArray(s.windows)) windows = s.windows;
       if (s.orbPos && typeof s.orbPos.x === 'number') orbPos = s.orbPos;
+      if (s.canvasZoom && typeof s.canvasZoom.scale === 'number') canvasZoom = s.canvasZoom;
     } catch { /* corrupt state — start fresh */ }
   }
 
@@ -1134,6 +1147,93 @@
     orbPos = { x, y, custom };
     orbWrap.style.setProperty('--orb-x', x + '%');
     orbWrap.style.setProperty('--orb-y', y + '%');
+  }
+
+  // ── Canvas self-awareness: state, a real snapshot, and zoom-to-fit ─────────
+  // The server can't touch the DOM, so this is Caden's only sense of what's
+  // actually on screen — sent fresh with every request.
+  function getCanvasState() {
+    return {
+      viewport: { w: innerWidth, h: innerHeight },
+      orb: { x: Math.round(orbPos.x), y: Math.round(orbPos.y) },
+      zoom: canvasZoom.scale,
+      windows: windows.map((w) => ({
+        id: w.id, title: w.title, kind: w.kind || 'window',
+        x: Math.round(w.x), y: Math.round(w.y),
+        width: w.width || 380, height: Math.round(w.h || 160),
+      })),
+    };
+  }
+
+  // A schematic diagram, not literal pixels — sandboxed iframes can't be
+  // captured cross-origin anyway. Rects/circle only, so the canvas is never
+  // tainted and toDataURL works everywhere.
+  function captureCanvasSnapshot() {
+    const state = getCanvasState();
+    const W = 480, H = 300;
+    const sx = W / state.viewport.w, sy = H / state.viewport.h;
+    const ocx = (state.orb.x / 100) * W, ocy = (state.orb.y / 100) * H;
+    let rects = '';
+    for (const w of state.windows) {
+      const rx = (w.x / 100) * state.viewport.w * sx;
+      const ry = (w.y / 100) * state.viewport.h * sy;
+      const rw = Math.max(18, w.width * sx);
+      const rh = Math.max(12, w.height * sy);
+      const label = String(w.title || '').slice(0, 22).replace(/[<>&]/g, '');
+      rects += `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" rx="4" fill="rgba(255,255,255,0.75)" stroke="rgba(90,105,145,0.5)" stroke-width="1"/>` +
+        `<text x="${(rx + 5).toFixed(1)}" y="${(ry + 12).toFixed(1)}" font-family="sans-serif" font-size="8" fill="#232838">${label}</text>`;
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">` +
+      `<rect width="${W}" height="${H}" fill="#cfd9ee"/>` +
+      `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="rgba(60,75,120,0.4)" stroke-dasharray="3,3"/>` +
+      rects +
+      `<circle cx="${ocx.toFixed(1)}" cy="${ocy.toFixed(1)}" r="14" fill="rgba(255,255,255,0.9)" stroke="rgba(105,118,200,0.6)" stroke-width="1.5"/>` +
+      `</svg>`;
+    const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = W; canvas.height = H;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        } catch { resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = svgUrl;
+    });
+  }
+
+  // Zooms out (never in) and pans so the orb and every open window fit
+  // within view. Recomputed fresh each call, so it also un-zooms as windows
+  // close.
+  function fitCanvas() {
+    const vw = innerWidth, vh = innerHeight;
+    const orbSize = vw <= 760 ? 150 : 190;
+    const orbX = (orbPos.x / 100) * vw, orbY = (orbPos.y / 100) * vh;
+    let minX = orbX - orbSize / 2, maxX = orbX + orbSize / 2;
+    let minY = orbY - orbSize / 2, maxY = orbY + orbSize / 2;
+    for (const w of windows) {
+      const wx = (w.x / 100) * vw, wy = (w.y / 100) * vh;
+      const ww = w.width || 380, wh = w.h || 160;
+      minX = Math.min(minX, wx); maxX = Math.max(maxX, wx + ww);
+      minY = Math.min(minY, wy); maxY = Math.max(maxY, wy + wh);
+    }
+    const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
+    const safeTop = 92, safeBottom = 118, sideMargin = 24;
+    const availW = Math.max(80, vw - sideMargin * 2), availH = Math.max(80, vh - safeTop - safeBottom);
+    const scale = Math.min(1, availW / bw, availH / bh);
+    const bcx = minX + bw / 2, bcy = minY + bh / 2;
+    const targetCx = sideMargin + availW / 2, targetCy = safeTop + availH / 2;
+    const tx = targetCx - bcx * scale, ty = targetCy - bcy * scale;
+    canvasZoom = { scale, tx, ty };
+    canvasViewport.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    save();
+  }
+  function resetCanvasZoom() {
+    canvasZoom = { scale: 1, tx: 0, ty: 0 };
+    canvasViewport.style.transform = '';
   }
 
   // ── State machine ───────────────────────────────────────────────────────────
@@ -1257,6 +1357,7 @@
 
     el.append(bar, body);
     winLayer.appendChild(el);
+    w.h = el.getBoundingClientRect().height;
 
     // Bring to front on interaction
     el.addEventListener('pointerdown', () => { el.style.zIndex = ++zSeq; });
@@ -1331,6 +1432,9 @@
       }
       case 'close_window':
         closeWindow(a.id);
+        break;
+      case 'fit_canvas':
+        fitCanvas();
         break;
       case 'spawn_agent': {
         const w = {
@@ -1532,12 +1636,16 @@
 
     const thinkingLines = [];
     let steps = [];
+    // Only gather/send layout state in canvas mode — chat mode has no orb,
+    // no windows, nothing for the server's canvas tools to reason about.
+    const canvasState = mode === 'canvas' ? getCanvasState() : null;
+    const canvasImage = mode === 'canvas' ? await captureCanvasSnapshot() : null;
 
     try {
       // Phase 1 — plan: real model reasoning, streamed into view.
       let planText = '';
       try {
-        const plan = await callApi({ phase: 'plan', agent, surface: mode, messages: history });
+        const plan = await callApi({ phase: 'plan', agent, surface: mode, messages: history, canvas: canvasState });
         const lines = plan.caden?.thinking || [];
         planText = lines.join('\n');
         lines.forEach((line, i) => {
@@ -1558,7 +1666,7 @@
       } catch { /* plan is best-effort */ }
 
       // Phase 2 — the real work: tools, agents, canvas directives.
-      const data = await callApi({ agent, surface: mode, messages: history, plan: planText });
+      const data = await callApi({ agent, surface: mode, messages: history, plan: planText, canvas: canvasState, canvas_image: canvasImage });
       const reply = data.choices?.[0]?.message?.content?.trim();
       if (!reply) throw new Error('Empty response.');
 
@@ -1661,6 +1769,7 @@
     renderLog();
     renderWindows();
     setOrbPos(50, 42, false);
+    resetCanvasZoom();
     answerThink.innerHTML = '';
     answerBody.textContent = '';
     setState('idle');
@@ -1720,6 +1829,9 @@
   renderLog();
   renderWindows();
   setOrbPos(orbPos.x, orbPos.y, orbPos.custom);
+  if (canvasZoom.scale !== 1) {
+    canvasViewport.style.transform = `translate(${canvasZoom.tx}px, ${canvasZoom.ty}px) scale(${canvasZoom.scale})`;
+  }
   setMode(mode);
   setState('idle');
   updateTelemetry();
