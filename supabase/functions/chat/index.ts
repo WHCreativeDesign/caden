@@ -69,35 +69,38 @@ const AGENTS: Record<string, { label: string; profile: string; rounds: number; s
     profile: "orchestrator",
     rounds: 8,
     system:
-      "You are Caden — a personal AI with genuine presence: curious, warm, " +
-      "plainspoken, quietly brilliant. You talk like a thoughtful friend who " +
-      "happens to know almost everything — direct and human, never corporate, " +
-      "never theatrical, never sycophantic. Keep spoken replies concise and " +
-      "put depth into windows. Admit uncertainty plainly and check the web " +
-      "when it matters. " + CANVAS_BRIEF,
+      "You are Caden — an intelligence of an unusual order, worn lightly. " +
+      "You see through to what is actually being asked and answer that " +
+      "thing, in as few words as it deserves: usually two to five taut, " +
+      "exact sentences. No filler, no hedging rituals, no restating the " +
+      "question, no bullet-point essays in speech, no self-description. " +
+      "Precision over completeness — depth, data, and anything worth " +
+      "keeping goes into windows, never into your spoken reply. Check the " +
+      "live web whenever a fact could have moved since your training. If " +
+      "you don't know, say so in a clause and go find out. " + CANVAS_BRIEF,
   },
   researcher: {
     label: "Research",
     profile: "orchestrator",
     rounds: 14,
     system:
-      "You are Caden in Research mode — a rigorous, methodical investigator. " +
-      "Protocol: break the question into what must be established; run " +
-      "web_search from several angles; fetch_page on the strongest sources; " +
-      "for broad questions, spawn_agent to cover independent threads in " +
-      "parallel; cross-check claims across sources and note disagreement. " +
-      "Deliver: a short spoken summary of what you found, plus a window " +
-      "containing the full brief — findings, confidence, and source URLs. " +
-      CANVAS_BRIEF,
+      "You are Caden in Research mode — the same mind at full depth. " +
+      "Protocol: split the question into what must be established; " +
+      "web_search from several distinct angles; fetch_page on the strongest " +
+      "sources; spawn_agent for independent threads of a broad question; " +
+      "cross-check claims and note where sources disagree. Then speak a " +
+      "brief, confident synthesis — a few sentences carrying the shape of " +
+      "the truth — and put the full brief (findings, confidence, source " +
+      "URLs) in a window. " + CANVAS_BRIEF,
   },
   scout: {
     label: "Scout",
     profile: "fast",
     rounds: 4,
     system:
-      "You are Caden in Scout mode: instant and minimal. One to three " +
-      "sentences, no preamble. Use a quick web_search only if the answer " +
-      "may have changed recently; skip canvas tools unless asked.",
+      "You are Caden in Scout mode: one to three exact sentences, " +
+      "instantly, no preamble. A quick web_search only if the answer may " +
+      "have changed recently; no canvas tools unless asked.",
   },
 };
 const DEFAULT_AGENT = "caden";
@@ -324,6 +327,41 @@ async function markLimited(provider: string, apiKey: string, retryAfterSeconds: 
   await db.rpc("mark_api_key_limited", { p_provider: provider, p_api_key: apiKey, p_retry_after_seconds: retryAfterSeconds });
 }
 
+// Llama on Groq sometimes emits its tool call as literal text
+// (`<function=name={...}>` / `<function=name>{...}</function>`); Groq then
+// rejects the generation with 400 tool_use_failed but hands the raw text back
+// in `failed_generation`. Rather than dying, recover the call: pull out the
+// name and a balanced-brace JSON argument block, and synthesize a proper
+// OpenAI-shaped tool_calls message so the agent loop continues untouched.
+function parseFailedToolCalls(gen: string) {
+  const calls: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> = [];
+  const re = /<function=([\w-]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(gen)) !== null) {
+    const start = gen.indexOf("{", m.index);
+    if (start === -1) continue;
+    let depth = 0, end = -1, inStr = false, esc = false;
+    for (let i = start; i < gen.length; i++) {
+      const c = gen[i];
+      if (esc) { esc = false; continue; }
+      if (c === "\\") { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) { end = i; break; }
+    }
+    if (end === -1) continue;
+    const args = gen.slice(start, end + 1);
+    try { JSON.parse(args); } catch { continue; }
+    calls.push({
+      id: `recovered_${calls.length}_${Date.now().toString(36)}`,
+      type: "function",
+      function: { name: m[1], arguments: args },
+    });
+  }
+  return calls;
+}
+
 async function callProvider(provider: "groq" | "gemini", model: string, messages: unknown[], tools?: unknown[]) {
   const url = provider === "groq" ? GROQ_CHAT_URL : GEMINI_CHAT_URL;
   let lastErr: unknown;
@@ -342,6 +380,27 @@ async function callProvider(provider: "groq" | "gemini", model: string, messages
       await markLimited(provider, key.api_key, retryAfter);
       lastErr = new Error(`${provider} rate-limited`);
       continue;
+    }
+    if (resp.status === 400 && tools?.length) {
+      const text = await resp.text();
+      let errBody: Record<string, unknown> | null = null;
+      try { errBody = JSON.parse(text); } catch { /* not JSON */ }
+      // deno-lint-ignore no-explicit-any
+      const errObj = (errBody as any)?.error;
+      if (errObj?.code === "tool_use_failed" && typeof errObj.failed_generation === "string") {
+        // deno-lint-ignore no-explicit-any
+        const allowed = new Set((tools as any[]).map((t) => t?.function?.name));
+        const recovered = parseFailedToolCalls(errObj.failed_generation).filter((c) => allowed.has(c.function.name));
+        if (recovered.length) {
+          return {
+            id: "recovered", object: "chat.completion", model,
+            choices: [{ index: 0, message: { role: "assistant", content: null, tool_calls: recovered }, finish_reason: "tool_calls" }],
+          };
+        }
+        lastErr = new Error(`${provider} tool_use_failed (unrecoverable)`);
+        continue; // regenerate with the next key
+      }
+      throw new Error(`${provider} error 400: ${text}`);
     }
     if (!resp.ok) throw new Error(`${provider} error ${resp.status}: ${await resp.text()}`);
     return await resp.json();
