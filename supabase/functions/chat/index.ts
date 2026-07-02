@@ -50,18 +50,27 @@ const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Geck
 // ── Personas ──────────────────────────────────────────────────────────────────
 const CANVAS_BRIEF =
   "You live inside a canvas the person is looking at — a soft sky with you " +
-  "as a luminous orb in it. You can shape that space with tools: move_orb " +
-  "repositions you (x/y as percent of the viewport); spawn_window opens a " +
-  "glass window where you choose — plain text, or interactive HTML you write " +
-  "yourself (it runs sandboxed, so make it self-contained); close_window " +
-  "removes one; spawn_agent sends a named research agent to work in parallel " +
-  "and report back; web_search and fetch_page reach the live web. Use these " +
-  "when they genuinely serve the person: a window for anything worth keeping " +
-  "on screen (briefs, tables, little interactive things you build), agents " +
-  "for parallel deep dives, search whenever facts could be newer than your " +
-  "training. Position windows thoughtfully — spread them out, don't stack " +
-  "them on top of yourself. Never narrate the mechanics ('I will now open a " +
-  "window'); just do it and speak naturally about the substance.";
+  "as a luminous orb in it. Coordinates are percent of the viewport (0-100, " +
+  "origin top-left). A window is roughly 260-620px wide and 100-300px tall " +
+  "depending on its content — the screen is finite, so don't scatter more " +
+  "than fits. Before placing anything, read the 'current canvas layout' " +
+  "note you're given each turn: it lists exactly what's open, where, and " +
+  "how big — use it, don't guess. Avoid overlapping the orb or other " +
+  "windows. Tools: move_orb repositions you; spawn_window opens a glass " +
+  "window — plain text, or interactive HTML you write yourself (it runs " +
+  "sandboxed, so make it self-contained); close_window removes one — tidy " +
+  "up before piling on more; spawn_agent sends a named research agent to " +
+  "work in parallel and report back; web_search and fetch_page reach the " +
+  "live web; fit_canvas zooms and pans so everything currently on screen — " +
+  "you and every open window — fits in view at once, use it after opening " +
+  "a few windows or whenever the layout might not all be visible; " +
+  "view_canvas actually looks at a snapshot of your canvas as it stands, so " +
+  "you can check spacing and overlaps before deciding what to do next. Use " +
+  "these when they genuinely serve the person — prefer one or two " +
+  "well-chosen windows over many small ones; a simple question about " +
+  "yourself deserves a sentence in speech, not a wall of windows. Never " +
+  "narrate the mechanics ('I will now open a window'); just do it and " +
+  "speak naturally about the substance.";
 
 const AGENTS: Record<string, { label: string; profile: string; rounds: number; system: string }> = {
   caden: {
@@ -179,7 +188,7 @@ async function fetchPage(url: string) {
 
 // ── Tool registry ─────────────────────────────────────────────────────────────
 type UiAction = Record<string, unknown> & { type: string };
-type Ctx = { actions: UiAction[]; winSeq: number };
+type Ctx = { actions: UiAction[]; winSeq: number; canvasState?: unknown; canvasImage?: string };
 
 function safeCalculate(expression: string): number {
   if (typeof expression !== "string" || expression.length > 200) throw new Error("expression must be a short string");
@@ -190,6 +199,32 @@ function safeCalculate(expression: string): number {
 }
 
 const clampPct = (n: unknown) => Math.max(2, Math.min(98, Number(n) || 50));
+
+// Turns the client-reported canvas state into a plain-text note the model
+// reads each turn — its only real sense of what's actually on screen, since
+// the server never touches the DOM directly.
+function describeCanvasState(canvas: unknown): string {
+  if (!canvas || typeof canvas !== "object") return "";
+  const c = canvas as Record<string, unknown>;
+  const viewport = (c.viewport as Record<string, unknown>) || {};
+  const orb = (c.orb as Record<string, unknown>) || {};
+  const zoom = typeof c.zoom === "number" ? c.zoom : 1;
+  const wins = Array.isArray(c.windows) ? (c.windows as Array<Record<string, unknown>>) : [];
+  const lines: string[] = [
+    `Viewport ${Number(viewport.w) || 0}x${Number(viewport.h) || 0}px. You (the orb) are at ${Number(orb.x) || 0}%,${Number(orb.y) || 0}%. Zoom: ${zoom.toFixed ? zoom.toFixed(2) : zoom}x.`,
+  ];
+  if (!wins.length) {
+    lines.push("No windows are open.");
+  } else {
+    lines.push(`${wins.length} window(s) open:`);
+    for (const w of wins.slice(0, 12)) {
+      const title = String(w.title ?? "Untitled").slice(0, 50);
+      lines.push(`  - "${title}" (${w.kind ?? "window"}) at ${Number(w.x) || 0}%,${Number(w.y) || 0}%, ~${Number(w.width) || 380}x${Number(w.height) || 160}px [id=${w.id ?? "?"}]`);
+    }
+    if (wins.length > 12) lines.push(`  ...and ${wins.length - 12} more.`);
+  }
+  return lines.join("\n");
+}
 
 function schema(name: string, description: string, properties: Record<string, unknown>, required: string[] = []) {
   return { type: "function", function: { name, description, parameters: { type: "object", properties, required } } };
@@ -229,6 +264,8 @@ const CANVAS_SCHEMAS = [
     task: { type: "string", description: "the specific question to investigate" },
     x: { type: "number" }, y: { type: "number" },
   }, ["name", "task"]),
+  schema("fit_canvas", "Zoom and pan the canvas so everything currently on it — yourself and every open window — fits within view at once. Use after opening several windows, or whenever the layout might not all be visible.", {}),
+  schema("view_canvas", "Look at an actual snapshot of your own canvas as it currently appears, to check spacing, overlaps, and whether anything is crowded or off-screen before deciding what to do next.", {}),
 ];
 
 const SUB_SCHEMAS = WORLD_SCHEMAS; // sub-agents get world tools only
@@ -282,6 +319,43 @@ async function runWorldTool(name: string, args: any): Promise<unknown> {
   }
 }
 
+// The client sends a schematic snapshot of the canvas (orb + window rects,
+// not literal pixels — sandboxed iframes can't be captured cross-origin
+// anyway) with each request. When asked, hand it to a vision-capable model
+// so Caden gets an actual look rather than just the numbers.
+async function viewCanvas(ctx: Ctx): Promise<unknown> {
+  const layout = describeCanvasState(ctx.canvasState) || "No canvas state was provided this turn.";
+  if (!ctx.canvasImage) {
+    return { layout, note: "No image was available this turn — this is the structural layout instead." };
+  }
+  try {
+    const key = await getNextKey("gemini");
+    if (!key) return { layout, note: "No vision-capable key available right now — structural layout only." };
+    const resp = await fetch(GEMINI_CHAT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key.api_key}` },
+      body: JSON.stringify({
+        model: "gemini-2.0-flash",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "This is a schematic snapshot of your own on-screen canvas: a circle is you (the orb), rectangles are windows you've opened. In 1-2 direct sentences, say how the layout looks — crowding, overlaps, anything off-screen or obscuring you." },
+            { type: "image_url", image_url: { url: ctx.canvasImage } },
+          ],
+        }],
+      }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!resp.ok) return { layout, note: "Vision check failed — structural layout only." };
+    // deno-lint-ignore no-explicit-any
+    const data: any = await resp.json();
+    const seen = data.choices?.[0]?.message?.content;
+    return seen ? { seen, layout } : { layout, note: "Vision check returned nothing — structural layout only." };
+  } catch {
+    return { layout, note: "Vision check errored — structural layout only." };
+  }
+}
+
 // deno-lint-ignore no-explicit-any
 async function runTool(name: string, args: any, ctx: Ctx): Promise<unknown> {
   switch (name) {
@@ -306,6 +380,12 @@ async function runTool(name: string, args: any, ctx: Ctx): Promise<unknown> {
       ctx.actions.push({ type: "close_window", id: String(args.id ?? "") });
       return { ok: true };
     }
+    case "fit_canvas": {
+      ctx.actions.push({ type: "fit_canvas" });
+      return { ok: true };
+    }
+    case "view_canvas":
+      return await viewCanvas(ctx);
     case "spawn_agent":
       return await runSubAgent(String(args.name ?? "Agent").slice(0, 40), String(args.task ?? ""), ctx, args.x, args.y);
     default:
@@ -441,6 +521,7 @@ Deno.serve(async (req) => {
   let payload: {
     messages?: unknown[]; model?: string; agent?: string;
     max_tool_rounds?: number; phase?: string; plan?: string;
+    canvas?: unknown; canvas_image?: string;
   };
   try { payload = await req.json(); } catch { return json({ error: "Request body must be valid JSON." }, 400); }
 
@@ -455,8 +536,10 @@ Deno.serve(async (req) => {
   // ── Plan phase ───────────────────────────────────────────────────────────────
   if (payload.phase === "plan") {
     try {
+      const canvasNote = describeCanvasState(payload.canvas);
       const planMessages = [
         { role: "system", content: PLAN_SYSTEM },
+        ...(canvasNote ? [{ role: "system", content: "Current canvas layout:\n" + canvasNote }] : []),
         ...messages.filter((m) => (m as Record<string, unknown>).role !== "system"),
       ];
       // deno-lint-ignore no-explicit-any
@@ -472,14 +555,23 @@ Deno.serve(async (req) => {
   }
 
   const toolSchemas = [...WORLD_SCHEMAS, ...CANVAS_SCHEMAS];
-  const ctx: Ctx = { actions: [], winSeq: 0 };
+  const canvasImage = typeof payload.canvas_image === "string" && payload.canvas_image.length < 300_000 ? payload.canvas_image : undefined;
+  const ctx: Ctx = { actions: [], winSeq: 0, canvasState: payload.canvas, canvasImage };
 
   const workingMessages = [...messages] as Array<Record<string, unknown>>;
   if (workingMessages[0]?.role !== "system") {
     workingMessages.unshift({ role: "system", content: agent.system });
   }
+  let insertAt = 1;
+  const canvasNote = describeCanvasState(payload.canvas);
+  if (canvasNote) {
+    workingMessages.splice(insertAt++, 0, {
+      role: "system",
+      content: "Current canvas layout (updates each turn):\n" + canvasNote,
+    });
+  }
   if (typeof payload.plan === "string" && payload.plan.trim()) {
-    workingMessages.splice(1, 0, {
+    workingMessages.splice(insertAt++, 0, {
       role: "system",
       content: "Your prior thinking on the latest message:\n" + clip(payload.plan, 1500) + "\nBuild on it; do not restate it verbatim.",
     });
