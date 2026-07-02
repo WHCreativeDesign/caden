@@ -427,6 +427,23 @@
     background: rgba(255,255,255,0.85);
   }
 
+  .cwin-body.has-image { padding: 0; max-height: none; }
+  .cwin-body.has-image img {
+    display: block;
+    width: 100%;
+    max-height: 360px;
+    object-fit: cover;
+    background: rgba(90, 105, 145, 0.08);
+  }
+  .cwin-caption {
+    padding: 11px 15px 14px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--dim);
+  }
+
   /* Agent windows — small research presences Caden dispatches */
   .cwin.agent .cwin-title::before {
     content: "";
@@ -1197,6 +1214,27 @@
         body{font-family:Inter,system-ui,sans-serif;margin:14px;color:#232838;font-size:14px;line-height:1.55;background:transparent}
         a{color:#5B67D8}</style></head><body>${w.html}</body></html>`;
       body.appendChild(frame);
+    } else if (w.image) {
+      body.classList.add('has-image');
+      const img = document.createElement('img');
+      img.alt = w.caption || w.title || '';
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.addEventListener('error', () => {
+        img.remove();
+        const fallback = document.createElement('div');
+        fallback.className = 'cwin-caption';
+        fallback.textContent = '(image unavailable)';
+        body.prepend(fallback);
+      }, { once: true });
+      img.src = w.image;
+      body.appendChild(img);
+      if (w.caption) {
+        const cap = document.createElement('div');
+        cap.className = 'cwin-caption';
+        renderRich(cap, w.caption);
+        body.appendChild(cap);
+      }
     } else if (w.kind === 'agent') {
       const task = document.createElement('div');
       task.className = 'agent-task';
@@ -1282,7 +1320,8 @@
       case 'spawn_window': {
         const w = {
           id: a.id || 'w' + (++actionSeq), title: a.title || 'Untitled',
-          x: a.x, y: a.y, width: a.width, text: a.text, html: a.html, kind: 'window',
+          x: a.x, y: a.y, width: a.width, text: a.text, html: a.html,
+          image: a.image, caption: a.caption, kind: 'window',
         };
         windows.push(w);
         createWindow(w);
@@ -1498,7 +1537,7 @@
       // Phase 1 — plan: real model reasoning, streamed into view.
       let planText = '';
       try {
-        const plan = await callApi({ phase: 'plan', agent, messages: history });
+        const plan = await callApi({ phase: 'plan', agent, surface: mode, messages: history });
         const lines = plan.caden?.thinking || [];
         planText = lines.join('\n');
         lines.forEach((line, i) => {
@@ -1519,7 +1558,7 @@
       } catch { /* plan is best-effort */ }
 
       // Phase 2 — the real work: tools, agents, canvas directives.
-      const data = await callApi({ agent, messages: history, plan: planText });
+      const data = await callApi({ agent, surface: mode, messages: history, plan: planText });
       const reply = data.choices?.[0]?.message?.content?.trim();
       if (!reply) throw new Error('Empty response.');
 
@@ -1559,8 +1598,10 @@
       Sound.arrive();
       setState(mode === 'canvas' ? 'speaking' : 'idle');
 
-      // Caden reshapes the canvas — windows, agents, movement.
-      runActions(data.caden?.actions);
+      // Caden reshapes the canvas — windows, agents, movement. The backend
+      // only emits these when surface was "canvas"; guard here too so a
+      // stale/late response can never spawn something in chat mode.
+      if (mode === 'canvas') runActions(data.caden?.actions);
 
       if (mode === 'canvas') {
         liveTurn.bodyEl.textContent = reply;
