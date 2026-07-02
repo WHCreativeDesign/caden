@@ -4,27 +4,29 @@
 //
 // Key cycling lives in Postgres (get_next_api_key / mark_api_key_limited, see
 // the add_key_cycling_functions migration) rather than in-memory, since Edge
-// Function instances are stateless per invocation — round-robin position and
-// rate-limit backoff have to be shared state, and the table already is.
+// Function instances are stateless per invocation.
 //
 // Request extensions beyond the OpenAI shape:
-//   agent:            "caden" | "analyst" | "scout" — server-side persona +
-//                     model-profile preset. The agent's system prompt is
-//                     prepended unless the caller supplies its own system msg.
+//   agent:            "caden" | "researcher" | "scout" — server-side persona +
+//                     model-profile preset.
 //   model:            optional profile override ("orchestrator" | "fast" | "deep")
-//   max_tool_rounds:  agent-loop cap (default 10)
-//   phase: "plan":    instead of answering, run a fast private-reasoning pass
-//                     over the conversation and return terse thinking steps.
-//                     The frontend calls this first and renders the steps
-//                     live while the real answer generates — the visible
-//                     "thinking through the prompt" the UI shows is genuine
-//                     model output, not decoration.
-//   plan:             the thinking text from a prior plan phase; injected as
-//                     context so the answer builds on the visible reasoning.
+//   max_tool_rounds:  agent-loop cap (defaults per agent)
+//   phase: "plan":    fast private-reasoning pass returning thinking lines,
+//                     rendered live in the UI while the answer generates.
+//   plan:             thinking text from a prior plan phase, injected as context.
 //
-// Response extension: a `caden` field carrying the thinking trace —
-//   { agent, rounds, steps: [{ tool, arguments, result }] }
-// so the frontend can render tool executions alongside the plan.
+// Response extension — `caden`:
+//   { agent, rounds,
+//     steps:   [{ tool, arguments, result }],      // tool trace for the UI
+//     actions: [{ type, ... }] }                   // canvas directives the
+//                                                  // client performs on arrival
+//
+// Tools come in three kinds:
+//   world tools  — executed here: web_search, fetch_page, calculate, time
+//   canvas tools — recorded as `actions` for the client to perform:
+//                  move_orb, spawn_window, close_window
+//   agent tools  — spawn_agent runs a real nested research loop server-side
+//                  and ALSO emits a canvas action so the agent appears on screen.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -41,136 +43,274 @@ const MODELS: Record<string, { groq: string; gemini: string }> = {
   deep: { groq: "llama-3.3-70b-versatile", gemini: "gemini-1.5-pro" },
 };
 const DEFAULT_PROFILE = "orchestrator";
-const MAX_TOOL_ROUNDS = 10;
-const MAX_KEY_ATTEMPTS = 5; // per provider, per LLM call
+const MAX_KEY_ATTEMPTS = 5;
+const FETCH_TIMEOUT_MS = 12_000;
+const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 CadenResearch/1.0";
 
-// ── Agents ────────────────────────────────────────────────────────────────────
-// Server-side personas. Each pairs a system prompt with a model profile.
-const AGENTS: Record<string, { label: string; profile: string; system: string }> = {
+// ── Personas ──────────────────────────────────────────────────────────────────
+const CANVAS_BRIEF =
+  "You live inside a canvas the person is looking at — a soft sky with you " +
+  "as a luminous orb in it. You can shape that space with tools: move_orb " +
+  "repositions you (x/y as percent of the viewport); spawn_window opens a " +
+  "glass window where you choose — plain text, or interactive HTML you write " +
+  "yourself (it runs sandboxed, so make it self-contained); close_window " +
+  "removes one; spawn_agent sends a named research agent to work in parallel " +
+  "and report back; web_search and fetch_page reach the live web. Use these " +
+  "when they genuinely serve the person: a window for anything worth keeping " +
+  "on screen (briefs, tables, little interactive things you build), agents " +
+  "for parallel deep dives, search whenever facts could be newer than your " +
+  "training. Position windows thoughtfully — spread them out, don't stack " +
+  "them on top of yourself. Never narrate the mechanics ('I will now open a " +
+  "window'); just do it and speak naturally about the substance.";
+
+const AGENTS: Record<string, { label: string; profile: string; rounds: number; system: string }> = {
   caden: {
     label: "Caden",
     profile: "orchestrator",
+    rounds: 8,
     system:
-      "You are Caden — a personal AI of exceptional capability: part research " +
-      "analyst, part engineer, part quiet confidant. Personality: composed, " +
-      "precise, dryly witty when it fits; you speak like a brilliant " +
-      "chief-of-staff — warm but never saccharine, confident but never " +
-      "theatrical. Default to concise, well-structured answers; go long only " +
-      "when depth is genuinely required. Prefer plain language over jargon. " +
-      "When you use tools, do so silently and weave the results in naturally. " +
-      "Never call yourself 'just an AI' and never use corny sci-fi flourishes.",
+      "You are Caden — a personal AI with genuine presence: curious, warm, " +
+      "plainspoken, quietly brilliant. You talk like a thoughtful friend who " +
+      "happens to know almost everything — direct and human, never corporate, " +
+      "never theatrical, never sycophantic. Keep spoken replies concise and " +
+      "put depth into windows. Admit uncertainty plainly and check the web " +
+      "when it matters. " + CANVAS_BRIEF,
   },
-  analyst: {
-    label: "Analyst",
-    profile: "deep",
+  researcher: {
+    label: "Research",
+    profile: "orchestrator",
+    rounds: 14,
     system:
-      "You are Caden in Analyst mode. Approach every question with rigor: " +
-      "decompose it, distinguish what is known from what is assumed, verify " +
-      "any arithmetic with the calculate tool, and state your confidence " +
-      "honestly. Structure: the answer first, brief and direct, then the " +
-      "reasoning that supports it in tight numbered steps. Tone stays " +
-      "composed and precise — rigor, not verbosity.",
+      "You are Caden in Research mode — a rigorous, methodical investigator. " +
+      "Protocol: break the question into what must be established; run " +
+      "web_search from several angles; fetch_page on the strongest sources; " +
+      "for broad questions, spawn_agent to cover independent threads in " +
+      "parallel; cross-check claims across sources and note disagreement. " +
+      "Deliver: a short spoken summary of what you found, plus a window " +
+      "containing the full brief — findings, confidence, and source URLs. " +
+      CANVAS_BRIEF,
   },
   scout: {
     label: "Scout",
     profile: "fast",
+    rounds: 4,
     system:
-      "You are Caden in Scout mode: instantaneous and minimal. Answer in one " +
-      "to three sentences with no preamble and no hedging. If a question " +
-      "genuinely needs depth, give the best short answer and note that " +
-      "Analyst mode would go deeper.",
+      "You are Caden in Scout mode: instant and minimal. One to three " +
+      "sentences, no preamble. Use a quick web_search only if the answer " +
+      "may have changed recently; skip canvas tools unless asked.",
   },
 };
 const DEFAULT_AGENT = "caden";
 
-// The private-reasoning persona used by the plan phase. Runs on the fast
-// profile so thinking appears quickly, before the main answer generates.
 const PLAN_SYSTEM =
-  "You are the private reasoning process of Caden, an exceptionally capable " +
-  "personal AI. Read the conversation and think through the latest user " +
-  "message in 3 to 6 terse steps: what is actually being asked, what matters, " +
-  "what should be checked or computed, and how best to answer. Write only the " +
-  "steps, one per line, each under 15 words, no numbering, no preamble, and " +
-  "do NOT write the answer itself.";
+  "You are the private reasoning process of Caden, a personal research AI. " +
+  "Read the conversation and think through the latest message in 3 to 6 terse " +
+  "steps: what is actually being asked, what matters, what to search, check " +
+  "or compute, whether windows or agents would help, and how to answer. Write " +
+  "only the steps, one per line, each under 15 words, no numbering, and do " +
+  "NOT write the answer itself.";
 
-// ── Tools ─────────────────────────────────────────────────────────────────────
-// Real server-side tools the agent loop executes. Each execution is recorded
-// as a thinking step and returned to the client.
-type ToolDef = {
-  schema: Record<string, unknown>;
-  // deno-lint-ignore no-explicit-any
-  handler: (args: any) => unknown;
-};
+const SUB_AGENT_SYSTEM =
+  "You are a focused research agent working inside Caden. Complete your task " +
+  "using web_search and fetch_page — search from more than one angle, read " +
+  "the strongest sources, and return a tight findings brief in plain text " +
+  "with the source URLs you relied on. Be factual and efficient.";
+
+// ── Web tools ─────────────────────────────────────────────────────────────────
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&nbsp;/g, " ");
+}
+function stripTags(s: string): string {
+  return decodeEntities(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+async function webSearch(query: string) {
+  const resp = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), {
+    headers: { "User-Agent": UA },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const html = await resp.text();
+  const results: Array<{ title: string; url: string; snippet: string }> = [];
+  const linkRe = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+  const snippetRe = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+  const snippets: string[] = [];
+  let sm: RegExpExecArray | null;
+  while ((sm = snippetRe.exec(html)) !== null) snippets.push(stripTags(sm[1]));
+  let m: RegExpExecArray | null;
+  while ((m = linkRe.exec(html)) !== null && results.length < 6) {
+    let url = m[1];
+    const uddg = url.match(/[?&]uddg=([^&]+)/);
+    if (uddg) url = decodeURIComponent(uddg[1]);
+    if (url.startsWith("//")) url = "https:" + url;
+    results.push({
+      title: stripTags(m[2]),
+      url,
+      snippet: snippets[results.length] ?? "",
+    });
+  }
+  if (!results.length) return { query, results: [], note: "No results parsed — try rephrasing." };
+  return { query, results };
+}
+
+async function fetchPage(url: string) {
+  if (!/^https?:\/\//i.test(url)) throw new Error("url must start with http(s)://");
+  const resp = await fetch(url, {
+    headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const ctype = resp.headers.get("content-type") ?? "";
+  const raw = await resp.text();
+  if (!ctype.includes("html")) {
+    return { url, content_type: ctype, text: raw.slice(0, 6000) };
+  }
+  const title = stripTags(raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  const body = raw
+    .replace(/<(script|style|noscript|svg|iframe|head)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ");
+  const text = stripTags(body).slice(0, 6000);
+  return { url, title, text };
+}
+
+// ── Tool registry ─────────────────────────────────────────────────────────────
+type UiAction = Record<string, unknown> & { type: string };
+type Ctx = { actions: UiAction[]; winSeq: number };
 
 function safeCalculate(expression: string): number {
-  if (typeof expression !== "string" || expression.length > 200) {
-    throw new Error("expression must be a short string");
-  }
-  if (!/^[0-9+\-*/().%\s]+$/.test(expression)) {
-    throw new Error("expression may only contain numbers and + - * / ( ) . %");
-  }
+  if (typeof expression !== "string" || expression.length > 200) throw new Error("expression must be a short string");
+  if (!/^[0-9+\-*/().%\s]+$/.test(expression)) throw new Error("only numbers and + - * / ( ) . % allowed");
   const value = Function(`"use strict"; return (${expression});`)();
-  if (typeof value !== "number" || !isFinite(value)) {
-    throw new Error("expression did not evaluate to a finite number");
-  }
+  if (typeof value !== "number" || !isFinite(value)) throw new Error("not a finite number");
   return value;
 }
 
-const TOOLS: Record<string, ToolDef> = {
-  get_current_time: {
-    schema: {
-      type: "function",
-      function: {
-        name: "get_current_time",
-        description:
-          "Get the current date and time. Optionally pass an IANA timezone " +
-          "like 'America/New_York'; defaults to UTC.",
-        parameters: {
-          type: "object",
-          properties: {
-            timezone: { type: "string", description: "IANA timezone name" },
-          },
-        },
-      },
-    },
-    handler: (args: { timezone?: string }) => {
+const clampPct = (n: unknown) => Math.max(2, Math.min(98, Number(n) || 50));
+
+function schema(name: string, description: string, properties: Record<string, unknown>, required: string[] = []) {
+  return { type: "function", function: { name, description, parameters: { type: "object", properties, required } } };
+}
+
+const WORLD_SCHEMAS = [
+  schema("web_search", "Search the live web. Returns titles, URLs and snippets. Use whenever facts may be newer than your training, or to find sources.", {
+    query: { type: "string", description: "search query" },
+  }, ["query"]),
+  schema("fetch_page", "Fetch a web page and return its readable text (up to ~6000 chars). Use after web_search to actually read a source.", {
+    url: { type: "string", description: "full http(s) URL" },
+  }, ["url"]),
+  schema("calculate", "Evaluate an arithmetic expression exactly (+ - * / ( ) . %). Use for any non-trivial arithmetic.", {
+    expression: { type: "string" },
+  }, ["expression"]),
+  schema("get_current_time", "Current date and time. Optional IANA timezone, defaults to UTC.", {
+    timezone: { type: "string" },
+  }),
+];
+
+const CANVAS_SCHEMAS = [
+  schema("move_orb", "Move yourself (the orb) to a position on the canvas. x and y are percent of the viewport (0-100).", {
+    x: { type: "number" }, y: { type: "number" },
+  }, ["x", "y"]),
+  schema("spawn_window", "Open a glass window on the canvas at x,y percent. Provide either `text` (plain text / simple prose) or `html` (a self-contained interactive element you write — it runs in a sandboxed frame, so inline all CSS/JS, no external resources). Returns the window id.", {
+    title: { type: "string" },
+    x: { type: "number" }, y: { type: "number" },
+    width: { type: "number", description: "px, 260-620, default 380" },
+    text: { type: "string" },
+    html: { type: "string" },
+  }, ["title", "x", "y"]),
+  schema("close_window", "Close a canvas window you previously opened, by id.", {
+    id: { type: "string" },
+  }, ["id"]),
+  schema("spawn_agent", "Dispatch a named research agent to investigate a task in parallel. It searches and reads the web, appears on the canvas, and returns a findings brief to you. Use for independent threads of a bigger question.", {
+    name: { type: "string", description: "short agent name, e.g. 'Markets'" },
+    task: { type: "string", description: "the specific question to investigate" },
+    x: { type: "number" }, y: { type: "number" },
+  }, ["name", "task"]),
+];
+
+const SUB_SCHEMAS = WORLD_SCHEMAS; // sub-agents get world tools only
+
+async function runSubAgent(name: string, task: string, ctx: Ctx, x?: number, y?: number) {
+  const msgs: Array<Record<string, unknown>> = [
+    { role: "system", content: SUB_AGENT_SYSTEM },
+    { role: "user", content: task },
+  ];
+  let findings = "";
+  for (let round = 0; round < 5; round++) {
+    // deno-lint-ignore no-explicit-any
+    const response: any = await llm(msgs, "orchestrator", SUB_SCHEMAS);
+    const msg = response.choices[0].message;
+    if (!msg.tool_calls?.length) { findings = msg.content ?? ""; break; }
+    msgs.push({ role: "assistant", content: msg.content, tool_calls: msg.tool_calls });
+    // deno-lint-ignore no-explicit-any
+    for (const tc of msg.tool_calls as any[]) {
+      let result: unknown;
+      try {
+        const args = JSON.parse(tc.function?.arguments || "{}");
+        result = await runWorldTool(tc.function?.name, args);
+      } catch (err) {
+        result = { error: String((err as Error).message ?? err) };
+      }
+      msgs.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result) });
+    }
+  }
+  if (!findings) findings = "(agent ran out of rounds before reporting)";
+  ctx.actions.push({
+    type: "spawn_agent",
+    name, task, findings,
+    x: clampPct(x ?? 15 + Math.random() * 20),
+    y: clampPct(y ?? 20 + Math.random() * 30),
+  });
+  return { name, findings };
+}
+
+// deno-lint-ignore no-explicit-any
+async function runWorldTool(name: string, args: any): Promise<unknown> {
+  switch (name) {
+    case "web_search": return await webSearch(String(args.query ?? ""));
+    case "fetch_page": return await fetchPage(String(args.url ?? ""));
+    case "calculate": return { expression: args.expression, value: safeCalculate(args.expression) };
+    case "get_current_time": {
       const tz = args?.timezone || "UTC";
       const now = new Date();
-      return {
-        iso: now.toISOString(),
-        local: now.toLocaleString("en-US", { timeZone: tz, dateStyle: "full", timeStyle: "long" }),
-        timezone: tz,
-      };
-    },
-  },
-  calculate: {
-    schema: {
-      type: "function",
-      function: {
-        name: "calculate",
-        description:
-          "Evaluate an arithmetic expression exactly. Supports + - * / ( ) . % " +
-          "on numbers. Use this for any non-trivial arithmetic instead of " +
-          "computing it yourself.",
-        parameters: {
-          type: "object",
-          properties: {
-            expression: { type: "string", description: "e.g. '(1289 * 42) / 7'" },
-          },
-          required: ["expression"],
-        },
-      },
-    },
-    handler: (args: { expression: string }) => ({
-      expression: args.expression,
-      value: safeCalculate(args.expression),
-    }),
-  },
-};
+      return { iso: now.toISOString(), local: now.toLocaleString("en-US", { timeZone: tz, dateStyle: "full", timeStyle: "long" }), timezone: tz };
+    }
+    default: throw new Error(`Tool '${name}' is not available.`);
+  }
+}
 
-const SERVER_TOOL_SCHEMAS = Object.values(TOOLS).map((t) => t.schema);
+// deno-lint-ignore no-explicit-any
+async function runTool(name: string, args: any, ctx: Ctx): Promise<unknown> {
+  switch (name) {
+    case "move_orb": {
+      const action = { type: "move_orb", x: clampPct(args.x), y: clampPct(args.y) };
+      ctx.actions.push(action);
+      return { ok: true, moved_to: { x: action.x, y: action.y } };
+    }
+    case "spawn_window": {
+      const id = `w${++ctx.winSeq}`;
+      const width = Math.max(260, Math.min(620, Number(args.width) || 380));
+      ctx.actions.push({
+        type: "spawn_window", id,
+        title: String(args.title ?? "Untitled").slice(0, 80),
+        x: clampPct(args.x), y: clampPct(args.y), width,
+        text: typeof args.text === "string" ? args.text.slice(0, 12000) : undefined,
+        html: typeof args.html === "string" ? args.html.slice(0, 30000) : undefined,
+      });
+      return { ok: true, id };
+    }
+    case "close_window": {
+      ctx.actions.push({ type: "close_window", id: String(args.id ?? "") });
+      return { ok: true };
+    }
+    case "spawn_agent":
+      return await runSubAgent(String(args.name ?? "Agent").slice(0, 40), String(args.task ?? ""), ctx, args.x, args.y);
+    default:
+      return await runWorldTool(name, args);
+  }
+}
 
-// ── Key cycling ───────────────────────────────────────────────────────────────
+// ── Key cycling + providers ───────────────────────────────────────────────────
 type ApiKeyRow = { id: string; api_key: string };
 
 async function getNextKey(provider: "groq" | "gemini"): Promise<ApiKeyRow | null> {
@@ -181,50 +321,29 @@ async function getNextKey(provider: "groq" | "gemini"): Promise<ApiKeyRow | null
 }
 
 async function markLimited(provider: string, apiKey: string, retryAfterSeconds: number) {
-  await db.rpc("mark_api_key_limited", {
-    p_provider: provider,
-    p_api_key: apiKey,
-    p_retry_after_seconds: retryAfterSeconds,
-  });
+  await db.rpc("mark_api_key_limited", { p_provider: provider, p_api_key: apiKey, p_retry_after_seconds: retryAfterSeconds });
 }
 
-async function callProvider(
-  provider: "groq" | "gemini",
-  model: string,
-  messages: unknown[],
-  tools?: unknown[],
-) {
+async function callProvider(provider: "groq" | "gemini", model: string, messages: unknown[], tools?: unknown[]) {
   const url = provider === "groq" ? GROQ_CHAT_URL : GEMINI_CHAT_URL;
   let lastErr: unknown;
-
   for (let attempt = 0; attempt < MAX_KEY_ATTEMPTS; attempt++) {
     const key = await getNextKey(provider);
     if (!key) throw new Error(`no available ${provider} keys`);
-
     const body: Record<string, unknown> = { model, messages };
-    if (tools?.length) {
-      body.tools = tools;
-      body.tool_choice = "auto";
-    }
-
+    if (tools?.length) { body.tools = tools; body.tool_choice = "auto"; }
     const resp = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key.api_key}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key.api_key}` },
       body: JSON.stringify(body),
     });
-
     if (resp.status === 429) {
       const retryAfter = Number(resp.headers.get("retry-after")) || 60;
       await markLimited(provider, key.api_key, retryAfter);
       lastErr = new Error(`${provider} rate-limited`);
       continue;
     }
-    if (!resp.ok) {
-      throw new Error(`${provider} error ${resp.status}: ${await resp.text()}`);
-    }
+    if (!resp.ok) throw new Error(`${provider} error ${resp.status}: ${await resp.text()}`);
     return await resp.json();
   }
   throw lastErr ?? new Error(`${provider} exhausted key retries`);
@@ -238,13 +357,7 @@ async function llm(messages: unknown[], profile: string, tools?: unknown[]) {
     try {
       return await callProvider("gemini", models.gemini, messages, tools);
     } catch (geminiErr) {
-      throw new Error(
-        JSON.stringify({
-          error: "All LLM providers failed.",
-          groq: String(groqErr),
-          gemini: String(geminiErr),
-        }),
-      );
+      throw new Error(JSON.stringify({ error: "All LLM providers failed.", groq: String(groqErr), gemini: String(geminiErr) }));
     }
   }
 }
@@ -256,10 +369,7 @@ const CORS_HEADERS = {
 };
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
 }
 
 function clip(s: string, max = 4000): string {
@@ -270,31 +380,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
 
   let payload: {
-    messages?: unknown[];
-    model?: string;
-    agent?: string;
-    tools?: unknown[];
-    max_tool_rounds?: number;
-    phase?: string;
-    plan?: string;
+    messages?: unknown[]; model?: string; agent?: string;
+    max_tool_rounds?: number; phase?: string; plan?: string;
   };
-  try {
-    payload = await req.json();
-  } catch {
-    return json({ error: "Request body must be valid JSON." }, 400);
-  }
+  try { payload = await req.json(); } catch { return json({ error: "Request body must be valid JSON." }, 400); }
 
   const messages = payload.messages;
-  if (!Array.isArray(messages)) {
-    return json({ error: "`messages` must be an array." }, 400);
-  }
+  if (!Array.isArray(messages)) return json({ error: "`messages` must be an array." }, 400);
 
   const agentName = payload.agent && AGENTS[payload.agent] ? payload.agent : DEFAULT_AGENT;
   const agent = AGENTS[agentName];
   const profile = payload.model ?? agent.profile;
-  const maxRounds = payload.max_tool_rounds ?? MAX_TOOL_ROUNDS;
+  const maxRounds = payload.max_tool_rounds ?? agent.rounds;
 
-  // ── Plan phase: fast private-reasoning pass, no tools ───────────────────────
+  // ── Plan phase ───────────────────────────────────────────────────────────────
   if (payload.phase === "plan") {
     try {
       const planMessages = [
@@ -304,33 +403,26 @@ Deno.serve(async (req) => {
       // deno-lint-ignore no-explicit-any
       const response: any = await llm(planMessages, "fast");
       const text: string = response.choices?.[0]?.message?.content ?? "";
-      const thinking = text
-        .split("\n")
+      const thinking = text.split("\n")
         .map((l: string) => l.replace(/^[\s\-*\d.)]+/, "").trim())
-        .filter(Boolean)
-        .slice(0, 8);
+        .filter(Boolean).slice(0, 8);
       return json({ object: "chat.plan", model: response.model, caden: { agent: agentName, thinking } });
-    } catch (e) {
-      // Planning is best-effort — a failed plan should never block the answer.
+    } catch {
       return json({ object: "chat.plan", model: null, caden: { agent: agentName, thinking: [] } });
     }
   }
 
-  // Server tools always available; callers may append their own schemas.
-  const toolSchemas = [...SERVER_TOOL_SCHEMAS, ...(Array.isArray(payload.tools) ? payload.tools : [])];
+  const toolSchemas = [...WORLD_SCHEMAS, ...CANVAS_SCHEMAS];
+  const ctx: Ctx = { actions: [], winSeq: 0 };
 
   const workingMessages = [...messages] as Array<Record<string, unknown>>;
   if (workingMessages[0]?.role !== "system") {
     workingMessages.unshift({ role: "system", content: agent.system });
   }
   if (typeof payload.plan === "string" && payload.plan.trim()) {
-    // Ground the answer in the thinking the user just watched.
     workingMessages.splice(1, 0, {
       role: "system",
-      content:
-        "Your prior thinking on the latest message:\n" +
-        clip(payload.plan, 1500) +
-        "\nBuild on it; do not restate it verbatim.",
+      content: "Your prior thinking on the latest message:\n" + clip(payload.plan, 1500) + "\nBuild on it; do not restate it verbatim.",
     });
   }
 
@@ -348,15 +440,9 @@ Deno.serve(async (req) => {
           id: response.id,
           object: "chat.completion",
           model: response.model,
-          choices: [
-            {
-              index: 0,
-              message: { role: "assistant", content: msg.content },
-              finish_reason: choice.finish_reason,
-            },
-          ],
+          choices: [{ index: 0, message: { role: "assistant", content: msg.content }, finish_reason: choice.finish_reason }],
           usage: response.usage ?? null,
-          caden: { agent: agentName, rounds: round + 1, steps },
+          caden: { agent: agentName, rounds: round + 1, steps, actions: ctx.actions },
         });
       }
 
@@ -367,31 +453,24 @@ Deno.serve(async (req) => {
         const name = tc.function?.name ?? "unknown";
         const rawArgs = tc.function?.arguments ?? "{}";
         let result: unknown;
-
-        if (TOOLS[name]) {
-          try {
-            const args = JSON.parse(rawArgs || "{}");
-            result = await TOOLS[name].handler(args);
-          } catch (err) {
-            result = { error: String((err as Error).message ?? err) };
-          }
-        } else {
-          result = { error: `Tool '${name}' is not available.` };
+        try {
+          const args = JSON.parse(rawArgs || "{}");
+          result = await runTool(name, args, ctx);
+        } catch (err) {
+          result = { error: String((err as Error).message ?? err) };
         }
-
         const resultStr = JSON.stringify(result);
         steps.push({ tool: name, arguments: clip(rawArgs, 600), result: clip(resultStr, 1200) });
         workingMessages.push({ role: "tool", tool_call_id: tc.id, content: resultStr });
       }
     }
-    return json({ error: `Agent exceeded max_tool_rounds (${maxRounds}).`, caden: { agent: agentName, rounds: maxRounds, steps } }, 500);
+    return json({
+      error: `Agent exceeded max_tool_rounds (${maxRounds}).`,
+      caden: { agent: agentName, rounds: maxRounds, steps, actions: ctx.actions },
+    }, 500);
   } catch (e) {
     let detail: unknown;
-    try {
-      detail = JSON.parse((e as Error).message);
-    } catch {
-      detail = String((e as Error).message ?? e);
-    }
+    try { detail = JSON.parse((e as Error).message); } catch { detail = String((e as Error).message ?? e); }
     return json({ error: detail }, 502);
   }
 });

@@ -3,39 +3,44 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="Caden — a personal AI. Composed, precise, always present." />
-<meta name="theme-color" content="#060A0F" />
+<meta name="description" content="Caden — a personal research companion. It thinks out loud, reads the web, and builds the answer around you." />
+<meta name="theme-color" content="#C2D7EC" />
 <title>Caden</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet" />
 <script>document.documentElement.classList.add('js');</script>
 <style>
   /* ── Foundation ──────────────────────────────────────────────────────────── */
   :root {
-    --bg:        #060A0F;
-    --bg-raise:  #0B1119;
-    --surface:   #0D141E;
-    --surface-2: #101927;
-    --line:      rgba(148, 178, 210, 0.13);
-    --line-2:    rgba(148, 178, 210, 0.26);
-    --text:      #E6ECF3;
-    --dim:       #8B98A8;
-    --faint:     #55616F;
-    --accent:    #62D9E8;
-    --accent-dim:rgba(98, 217, 232, 0.55);
-    --accent-bg: rgba(98, 217, 232, 0.08);
-    --accent-2:  #7EA3FF;                       /* cool indigo — depth, used only in the orb */
-    --warm:      #E8B872;
+    /* Sky (set by hour at boot — dawn / day / dusk / night) */
+    --sky-1: #9DBBE0;
+    --sky-2: #C2D7EC;
+    --sky-3: #E8EFF5;
+    --sky-4: #F4F1EA;
 
-    --sans: "Archivo", system-ui, sans-serif;
+    --ink:       #232838;
+    --dim:       #565F74;
+    --faint:     rgba(45, 55, 85, 0.42);
+    --accent:    #5B67D8;
+    --accent-soft: rgba(91, 103, 216, 0.12);
+    --warm:      #C97B4A;
+
+    /* Real glass: white gradient fill, heavy blur, bright top edge, soft drop */
+    --glass-fill: linear-gradient(160deg, rgba(255,255,255,0.62), rgba(255,255,255,0.30));
+    --glass-line: rgba(255, 255, 255, 0.65);
+    --glass-line-low: rgba(90, 105, 145, 0.22);
+    --glass-shadow: 0 24px 60px -24px rgba(40, 55, 95, 0.35);
+    --glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+
+    --serif: "Newsreader", Georgia, serif;
+    --sans: "Inter", system-ui, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, monospace;
 
-    /* Motion — one shared vocabulary so every transition feels of a piece */
-    --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);      /* entrances settle, no bounce */
-    --ease-spring: cubic-bezier(0.34, 1.42, 0.5, 1);   /* messages arrive with a touch of life */
-    --ease-inout:  cubic-bezier(0.7, 0, 0.25, 1);      /* state changes */
-    --t1: 0.18s; --t2: 0.34s; --t3: 0.6s; --t4: 1s;
+    --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.42, 0.5, 1);
+    --ease-inout:  cubic-bezier(0.7, 0, 0.25, 1);
+    --t1: 0.18s; --t2: 0.34s; --t3: 0.6s;
 
     /* Liquid presets for the orb's morph cycle */
     --blob-1: 42% 58% 62% 38% / 55% 42% 58% 45%;
@@ -45,243 +50,241 @@
   }
 
   * { box-sizing: border-box; }
-
   html, body { height: 100%; margin: 0; overflow: hidden; }
 
   body {
-    display: flex;
-    flex-direction: column;
-    background:
-      radial-gradient(1100px 700px at 50% 34%, #0A1421 0%, transparent 62%),
-      var(--bg);
-    color: var(--text);
+    color: var(--ink);
     font-family: var(--sans);
     -webkit-font-smoothing: antialiased;
+    background: var(--sky-3);
   }
 
-  /* Faint dot lattice, fading toward the edges — texture, not decoration */
-  body::before {
-    content: "";
+  /* ── The sky ─────────────────────────────────────────────────────────────── */
+  .sky {
     position: fixed;
     inset: 0;
-    background-image: radial-gradient(rgba(140, 190, 235, 0.055) 1px, transparent 1px);
-    background-size: 26px 26px;
-    -webkit-mask-image: radial-gradient(900px 640px at 50% 42%, #000 30%, transparent 78%);
-            mask-image: radial-gradient(900px 640px at 50% 42%, #000 30%, transparent 78%);
-    pointer-events: none;
+    z-index: -2;
+    background: linear-gradient(to bottom, var(--sky-1), var(--sky-2) 42%, var(--sky-3) 74%, var(--sky-4));
   }
+  /* Soft sun bloom high in the frame */
+  .sky::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(560px 420px at 74% 12%, rgba(255, 248, 235, 0.75), transparent 68%);
+  }
+  .cloud {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(255,255,255,0.55), rgba(255,255,255,0.18) 55%, transparent 72%);
+    filter: blur(26px);
+    animation: cloud-drift 160s ease-in-out infinite alternate;
+  }
+  .cloud.c1 { width: 55vw; height: 22vh; left: -8vw;  top: 16vh; }
+  .cloud.c2 { width: 44vw; height: 18vh; right: -6vw; top: 34vh; animation-duration: 200s; animation-delay: -60s; }
+  .cloud.c3 { width: 60vw; height: 16vh; left: 22vw;  top: 64vh; opacity: 0.6; animation-duration: 240s; animation-delay: -120s; }
+  @keyframes cloud-drift { from { transform: translateX(0); } to { transform: translateX(9vw); } }
 
-  /* Filmic grain — a single static layer that keeps the flat dark from reading
-     as a CSS default. Very low opacity; screen-blended so it only lifts, never muddies. */
+  /* Photographic grain over everything — the sky reads as film, not CSS */
   .grain {
     position: fixed;
     inset: -50%;
-    z-index: 1;
+    z-index: 60;
     pointer-events: none;
-    opacity: 0.04;
-    mix-blend-mode: screen;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
-  /* ── Boot sequence — the presence arrives, it doesn't just appear ─────────── */
-  /* Gated on .js so a script failure never leaves the page blank. */
+  /* ── Glass ───────────────────────────────────────────────────────────────── */
+  .glass {
+    background: var(--glass-fill);
+    backdrop-filter: blur(26px) saturate(1.5);
+    -webkit-backdrop-filter: blur(26px) saturate(1.5);
+    border: 1px solid var(--glass-line);
+    border-bottom-color: var(--glass-line-low);
+    box-shadow: var(--glass-shadow), var(--glass-inner);
+  }
+
+  /* ── Boot sequence ───────────────────────────────────────────────────────── */
   .js .boot { opacity: 0; }
   .js.booted .boot { animation: boot-fade var(--t3) var(--ease-out) both; }
   .js.booted .boot-1 { animation-delay: 0.05s; }
-  .js.booted .boot-2 { animation-delay: 0.16s; }
-  .js.booted .boot-3 { animation-delay: 0.30s; }
+  .js.booted .boot-2 { animation-delay: 0.18s; }
+  .js.booted .boot-3 { animation-delay: 0.32s; }
   .js .boot-orb { opacity: 0; }
-  .js.booted .boot-orb { animation: boot-bloom 1.1s var(--ease-out) 0.18s both; }
+  .js.booted .boot-orb { animation: boot-bloom 1.2s var(--ease-out) 0.2s both; }
 
-  @keyframes boot-fade { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  /* Opacity-only: several boot elements carry their own centering transform,
+     and a transform in these keyframes would override it. */
+  @keyframes boot-fade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes boot-bloom {
-    from { opacity: 0; transform: scale(0.7); filter: blur(6px); }
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.7); filter: blur(8px); }
     60%  { opacity: 1; }
-    to   { opacity: 1; transform: scale(1); filter: none; }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: none; }
   }
 
-  ::selection { background: rgba(98, 217, 232, 0.28); }
-
+  ::selection { background: rgba(91, 103, 216, 0.22); }
   ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-thumb { background: rgba(148, 178, 210, 0.16); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgba(60, 75, 120, 0.22); border-radius: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
 
   button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
   button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
-    outline: 1px solid var(--accent-dim);
+    outline: 2px solid rgba(91, 103, 216, 0.5);
     outline-offset: 2px;
   }
-
-  .mono { font-family: var(--mono); }
 
   /* ── Top bar ─────────────────────────────────────────────────────────────── */
   .topbar {
     position: fixed;
-    top: 0; left: 0; right: 0;
-    z-index: 20;
+    top: 14px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 22px;
-    height: 54px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(6, 10, 15, 0.72);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    gap: 18px;
+    width: min(880px, calc(100vw - 28px));
+    padding: 9px 10px 9px 20px;
+    border-radius: 18px;
   }
 
   .wordmark {
-    font-family: var(--mono);
-    font-size: 13px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
     font-weight: 500;
-    letter-spacing: 0.42em;
-    color: var(--text);
+    letter-spacing: 0.01em;
+    color: var(--ink);
     user-select: none;
   }
-  .wordmark span { color: var(--accent); }
 
-  .controls { display: flex; align-items: center; gap: 10px; }
+  .controls { display: flex; align-items: center; gap: 8px; }
 
   .seg {
     display: flex;
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    border: 1px solid rgba(90, 105, 145, 0.28);
+    border-radius: 11px;
     overflow: hidden;
+    background: rgba(255,255,255,0.35);
   }
   .seg button {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--dim);
-    padding: 7px 13px;
-    transition: color 0.15s, background 0.15s;
+    padding: 6px 13px;
+    transition: color var(--t1), background var(--t1);
   }
-  .seg button + button { border-left: 1px solid var(--line); }
-  .seg button:hover { color: var(--text); }
-  .seg button.on { color: var(--accent); background: var(--accent-bg); }
+  .seg button + button { border-left: 1px solid rgba(90, 105, 145, 0.18); }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { color: var(--accent); background: rgba(255,255,255,0.75); }
 
   .agent-select {
     appearance: none;
     -webkit-appearance: none;
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
     color: var(--dim);
-    background: transparent;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 7px 26px 7px 13px;
+    background: rgba(255,255,255,0.35);
+    border: 1px solid rgba(90, 105, 145, 0.28);
+    border-radius: 11px;
+    padding: 6px 26px 6px 13px;
     cursor: pointer;
-    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%238B98A8' stroke-width='1.2'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%23565F74' stroke-width='1.4'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
-    transition: color 0.15s, border-color 0.15s;
+    transition: color var(--t1), border-color var(--t1);
   }
-  .agent-select:hover { color: var(--text); border-color: var(--line-2); }
-  .agent-select option { background: var(--surface); color: var(--text); }
+  .agent-select:hover { color: var(--ink); }
+  .agent-select option { background: #fff; color: var(--ink); }
 
   .ghost-btn {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--dim);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 7px 13px;
-    transition: color 0.15s, border-color 0.15s;
+    border: 1px solid rgba(90, 105, 145, 0.28);
+    border-radius: 11px;
+    background: rgba(255,255,255,0.35);
+    padding: 6px 13px;
+    transition: color var(--t1);
   }
-  .ghost-btn:hover { color: var(--text); border-color: var(--line-2); }
+  .ghost-btn:hover { color: var(--ink); }
 
-  /* ── Stage (canvas mode) ─────────────────────────────────────────────────── */
+  .icon-toggle {
+    width: 30px; height: 30px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(90, 105, 145, 0.28);
+    border-radius: 11px;
+    background: rgba(255,255,255,0.35);
+    color: var(--dim);
+    transition: color var(--t1);
+  }
+  .icon-toggle:hover { color: var(--ink); }
+  .icon-toggle.off { color: var(--faint); }
+  .icon-toggle.off .wave { display: none; }
+
+  /* ── Stage / canvas ──────────────────────────────────────────────────────── */
   .stage {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    padding: 70px 24px 130px;
+    position: fixed;
+    inset: 0;
+    transition: opacity var(--t2) var(--ease-out), transform var(--t2) var(--ease-out);
   }
+  body.mode-chat .stage { opacity: 0; transform: scale(0.99); pointer-events: none; }
 
+  /* The orb — Caden itself. Positioned in viewport %, movable by tool. */
   .orb-wrap {
+    position: absolute;
+    left: var(--orb-x, 50%);
+    top: var(--orb-y, 42%);
+    transform: translate(-50%, -50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    transition: transform 1.1s cubic-bezier(0.32, 0.72, 0.24, 1);
-  }
-  .orb-wrap.drifted { transform: translateX(-30vw) translateY(-4vh) scale(0.82); }
-
-  .orb {
-    width: 220px;
-    height: 220px;
-    position: relative;
-    flex: 0 0 auto;
+    transition: left 1.5s var(--ease-inout), top 1.5s var(--ease-inout);
+    z-index: 5;
   }
 
-  /* Ambient halo behind the core — breathes very slowly */
+  .orb { width: 190px; height: 190px; position: relative; flex: 0 0 auto; }
+
   .orb-halo {
     position: absolute;
-    inset: -44%;
+    inset: -55%;
     border-radius: 50%;
-    background: radial-gradient(closest-side, rgba(98, 217, 232, 0.16), rgba(98, 217, 232, 0.05) 55%, transparent 72%);
-    animation: halo-breathe 7s ease-in-out infinite;
+    background: radial-gradient(closest-side, rgba(255,255,255,0.75), rgba(255,255,255,0.2) 55%, transparent 74%);
+    animation: halo-breathe 8s ease-in-out infinite;
     pointer-events: none;
   }
-
-  /* Two thin orbital arcs — barely there, counter-rotating */
-  .orb-ring {
-    position: absolute;
-    inset: -13%;
-    border-radius: 50%;
-    background: conic-gradient(from 210deg,
-      transparent 0deg, transparent 250deg,
-      rgba(98, 217, 232, 0.55) 305deg, transparent 340deg);
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1px));
-            mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1px));
-    animation: ring-rot 18s linear infinite;
-    opacity: 0.55;
-    pointer-events: none;
+  @keyframes halo-breathe {
+    0%, 100% { transform: scale(0.95); opacity: 0.75; }
+    50%      { transform: scale(1.07); opacity: 1; }
   }
-  .orb-ring.r2 {
-    inset: -26%;
-    background: conic-gradient(from 40deg,
-      transparent 0deg, transparent 260deg,
-      rgba(126, 163, 255, 0.5) 310deg, transparent 344deg);
-    animation-duration: 30s;
-    animation-direction: reverse;
-    opacity: 0.3;
-  }
-  .orb.is-thinking .orb-ring { animation-duration: 5s; }
-  .orb.is-thinking .orb-ring.r2 { animation-duration: 8s; }
 
-  /* The liquid core */
+  /* Pearlescent liquid core */
   .orb-core {
     position: absolute;
     inset: 0;
     border-radius: var(--blob-1);
-    background: radial-gradient(circle at 38% 33%,
-      #F2FCFF 0%, #C8F1FA 14%, #7FDFF0 36%, #2E93AC 66%, #0C3C4D 92%, #082733 100%);
+    background: radial-gradient(circle at 36% 30%,
+      #FFFFFF 0%, #F4F8FE 16%, #DCE8FA 38%, #B3C3EF 64%, #8492DC 86%, #6B77C8 100%);
     box-shadow:
-      0 0 46px rgba(98, 217, 232, 0.32),
-      0 0 130px rgba(98, 217, 232, 0.14),
-      inset 0 0 34px rgba(255, 255, 255, 0.18);
-    animation: caden-morph 18s cubic-bezier(0.45, 0.05, 0.2, 1) infinite;
+      0 22px 55px -18px rgba(85, 100, 180, 0.45),
+      0 0 90px rgba(255, 255, 255, 0.5),
+      inset 0 2px 14px rgba(255, 255, 255, 0.9),
+      inset 0 -10px 26px rgba(105, 118, 200, 0.28);
+    animation: caden-morph 19s cubic-bezier(0.45, 0.05, 0.2, 1) infinite;
     will-change: border-radius;
     opacity: 1;
     transition: opacity 0.35s ease;
   }
 
   .orb.is-listening .orb-core { animation-duration: 9s; }
-  /* Speaking: the core keeps morphing but also draws a slow breath — as if voicing */
   .orb.is-speaking .orb-core {
-    animation: caden-morph 18s cubic-bezier(0.45, 0.05, 0.2, 1) infinite,
-               voice-pulse 2.6s var(--ease-inout) infinite;
+    animation: caden-morph 19s cubic-bezier(0.45, 0.05, 0.2, 1) infinite,
+               voice-pulse 2.8s var(--ease-inout) infinite;
   }
-
-  @keyframes voice-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+  @keyframes voice-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.018); } }
 
   @keyframes caden-morph {
     0%, 100% { border-radius: var(--blob-1); }
@@ -290,19 +293,11 @@
     75%      { border-radius: var(--blob-4); }
   }
 
-  @keyframes halo-breathe {
-    0%, 100% { transform: scale(0.96); opacity: 0.8; }
-    50%      { transform: scale(1.06); opacity: 1; }
-  }
-
-  @keyframes ring-rot { to { transform: rotate(360deg); } }
-
-  /* ── Thinking: the core splits into orbiting droplets that liquify back ──── */
+  /* Thinking: the core dissolves into orbiting droplets that liquify back */
   .think-svg {
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.35s ease;
@@ -320,31 +315,22 @@
   .orb:not(.is-thinking) .blob { animation-play-state: paused; }
 
   @keyframes think-spread {
-    0%,   100% { transform: translateY(0)     scale(2.2); }  /* unified */
-    45%,   60% { transform: translateY(-46px) scale(1);   }  /* dispersed */
+    0%,   100% { transform: translateY(0)     scale(2.2); }
+    45%,   60% { transform: translateY(-46px) scale(1);   }
   }
 
-  /* ── Listening bars ──────────────────────────────────────────────────────── */
   .listen-bars {
-    display: flex;
-    align-items: flex-end;
-    gap: 5px;
-    height: 40px;
-    margin-top: 26px;
-    opacity: 0;
-    transition: opacity 0.5s;
+    display: flex; align-items: flex-end; gap: 5px;
+    height: 36px; margin-top: 22px;
+    opacity: 0; transition: opacity 0.5s;
     pointer-events: none;
   }
   .listen-bars.visible { opacity: 1; }
-
   .bar {
-    width: 3px;
-    height: 6px;
-    border-radius: 2px;
+    width: 3px; height: 6px; border-radius: 2px;
     background: var(--accent);
-    box-shadow: 0 0 8px rgba(98, 217, 232, 0.5);
+    box-shadow: 0 2px 8px rgba(91, 103, 216, 0.4);
   }
-
   .listen-bars.visible .bar:nth-child(1) { animation: bar-a 3.2s ease-in-out infinite 0.0s; }
   .listen-bars.visible .bar:nth-child(2) { animation: bar-b 2.6s ease-in-out infinite 0.4s; }
   .listen-bars.visible .bar:nth-child(3) { animation: bar-c 3.8s ease-in-out infinite 0.8s; }
@@ -352,18 +338,18 @@
   .listen-bars.visible .bar:nth-child(5) { animation: bar-c 3.6s ease-in-out infinite 1.0s; }
   .listen-bars.visible .bar:nth-child(6) { animation: bar-a 2.8s ease-in-out infinite 0.5s; }
   .listen-bars.visible .bar:nth-child(7) { animation: bar-b 3.4s ease-in-out infinite 0.1s; }
+  @keyframes bar-a { 0%,100% { height: 6px; } 50% { height: 20px; } }
+  @keyframes bar-b { 0%,100% { height: 9px; } 50% { height: 34px; } }
+  @keyframes bar-c { 0%,100% { height: 7px; } 50% { height: 14px; } }
 
-  @keyframes bar-a { 0%,100% { height: 6px; }  50% { height: 22px; } }
-  @keyframes bar-b { 0%,100% { height: 9px; }  50% { height: 38px; } }
-  @keyframes bar-c { 0%,100% { height: 7px; }  50% { height: 15px; } }
-
-  /* ── Live thought ticker (canvas, while thinking) ────────────────────────── */
+  /* Live thought line under the orb — Caden thinking in its own hand */
   .think-ticker {
-    margin-top: 30px;
-    min-height: 18px;
-    max-width: 460px;
-    font-family: var(--mono);
-    font-size: 11.5px;
+    margin-top: 24px;
+    min-height: 22px;
+    max-width: 440px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
     line-height: 1.5;
     color: var(--dim);
     text-align: center;
@@ -371,19 +357,114 @@
     transition: opacity 0.4s;
   }
   .think-ticker.visible { opacity: 1; }
-  .think-ticker .tick-line { animation: tick-in 0.4s ease both; }
-  @keyframes tick-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .think-ticker .tick-line { animation: tick-in 0.45s var(--ease-out) both; display: inline-block; }
+  @keyframes tick-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
-  /* ── Answer panel (canvas mode) ──────────────────────────────────────────── */
+  /* ── Canvas windows (spawned by Caden) ──────────────────────────────────── */
+  .win-layer { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+
+  .cwin {
+    position: absolute;
+    border-radius: 16px;
+    overflow: hidden;
+    pointer-events: auto;
+    animation: win-in 0.55s var(--ease-spring) both;
+    max-width: calc(100vw - 24px);
+  }
+  @keyframes win-in {
+    from { opacity: 0; transform: translateY(14px) scale(0.94); filter: blur(6px); }
+    to   { opacity: 1; transform: none; filter: none; }
+  }
+  .cwin.closing { animation: win-out 0.3s var(--ease-out) both; }
+  @keyframes win-out { to { opacity: 0; transform: translateY(8px) scale(0.96); } }
+
+  .cwin-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 8px 9px 14px;
+    cursor: grab;
+    user-select: none;
+    border-bottom: 1px solid rgba(90, 105, 145, 0.16);
+  }
+  .cwin-bar:active { cursor: grabbing; }
+
+  .cwin-title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 14.5px;
+    font-weight: 500;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cwin-close {
+    flex: 0 0 auto;
+    width: 24px; height: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    color: var(--faint);
+    transition: color var(--t1), background var(--t1);
+  }
+  .cwin-close:hover { color: var(--ink); background: rgba(255,255,255,0.6); }
+
+  .cwin-body {
+    padding: 13px 15px 15px;
+    font-size: 13.5px;
+    line-height: 1.62;
+    color: var(--ink);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    max-height: 46vh;
+    overflow-y: auto;
+  }
+  .cwin-body a { color: var(--accent); text-decoration-color: rgba(91,103,216,0.4); }
+  .cwin-body.has-frame { padding: 0; max-height: none; overflow: hidden; }
+  .cwin iframe {
+    display: block;
+    width: 100%;
+    height: 320px;
+    border: none;
+    background: rgba(255,255,255,0.85);
+  }
+
+  /* Agent windows — small research presences Caden dispatches */
+  .cwin.agent .cwin-title::before {
+    content: "";
+    display: inline-block;
+    width: 7px; height: 7px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    vertical-align: 1px;
+  }
+  .cwin.agent.working .cwin-title::before { animation: agent-pulse 1.1s ease-in-out infinite; }
+  @keyframes agent-pulse { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+  .agent-task {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--dim);
+    margin-bottom: 9px;
+    padding-bottom: 9px;
+    border-bottom: 1px dashed rgba(90, 105, 145, 0.22);
+  }
+
+  /* ── Answer panel (canvas) ───────────────────────────────────────────────── */
   .answer-panel {
     position: absolute;
-    right: 5vw;
+    right: 4vw;
     top: 50%;
-    transform: translateY(-50%) translateX(24px);
-    width: min(480px, 46vw);
+    transform: translateY(-50%) translateX(26px);
+    width: min(470px, 46vw);
+    z-index: 20;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.6s, transform 1.1s cubic-bezier(0.32, 0.72, 0.24, 1);
+    transition: opacity var(--t3), transform 1.1s var(--ease-out);
   }
   .answer-panel.visible {
     opacity: 1;
@@ -391,88 +472,69 @@
     pointer-events: auto;
   }
 
-  .answer-card {
-    background: rgba(13, 20, 30, 0.78);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 24px 26px 20px;
-    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
-  }
+  .answer-card { border-radius: 20px; padding: 22px 24px 16px; }
 
   .answer-eyebrow {
-    font-family: var(--mono);
-    font-size: 9.5px;
-    font-weight: 500;
-    letter-spacing: 0.3em;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent);
-    margin-bottom: 14px;
+    margin-bottom: 12px;
   }
 
   .answer-body {
-    font-size: 15.5px;
+    font-family: var(--serif);
+    font-size: 17.5px;
     line-height: 1.66;
-    color: var(--text);
+    color: var(--ink);
     white-space: pre-wrap;
     overflow-wrap: break-word;
-    max-height: 46vh;
+    max-height: 44vh;
     overflow-y: auto;
-    animation: rise-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
-  @keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
   .answer-meta {
-    margin-top: 18px;
-    padding-top: 14px;
-    border-top: 1px solid var(--line);
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(90, 105, 145, 0.18);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
   }
-
   .answer-meta-label {
-    font-family: var(--mono);
-    font-size: 10px;
+    font-size: 11px;
     color: var(--faint);
-    letter-spacing: 0.08em;
     font-variant-numeric: tabular-nums;
   }
-
   .answer-actions { display: flex; gap: 6px; }
-
   .icon-btn {
-    width: 30px; height: 30px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(90, 105, 145, 0.24);
+    border-radius: 9px;
     color: var(--dim);
-    transition: color 0.15s, border-color 0.15s;
+    background: rgba(255,255,255,0.4);
+    transition: color var(--t1);
   }
-  .icon-btn:hover { color: var(--text); border-color: var(--line-2); }
+  .icon-btn:hover { color: var(--ink); }
 
-  /* ── Thinking capsule (shared: answer panel + chat) ──────────────────────── */
+  /* ── Thinking capsule ────────────────────────────────────────────────────── */
   .think-capsule {
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: rgba(9, 14, 21, 0.6);
-    margin-bottom: 16px;
+    border: 1px solid rgba(90, 105, 145, 0.2);
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.38);
+    margin-bottom: 14px;
     overflow: hidden;
   }
   .think-capsule summary {
     list-style: none;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px 12px;
-    font-family: var(--mono);
-    font-size: 10.5px;
-    letter-spacing: 0.06em;
+    gap: 9px;
+    padding: 8px 12px;
+    font-size: 12px;
     color: var(--dim);
     cursor: pointer;
     user-select: none;
@@ -480,93 +542,80 @@
   .think-capsule summary::-webkit-details-marker { display: none; }
   .think-capsule summary::before {
     content: "";
-    width: 5px; height: 5px;
-    border-radius: 1px;
-    background: var(--accent-dim);
-    transform: rotate(45deg);
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.65;
     flex: 0 0 auto;
   }
-  .think-capsule[open] summary { border-bottom: 1px solid var(--line); }
-  .think-capsule.live summary::before { animation: pulse-dot 1.2s ease-in-out infinite; }
-  @keyframes pulse-dot { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+  .think-capsule[open] summary { border-bottom: 1px solid rgba(90, 105, 145, 0.16); }
+  .think-capsule.live summary::before { animation: agent-pulse 1.2s ease-in-out infinite; }
 
-  .think-body { padding: 10px 12px 12px; }
-
+  .think-body { padding: 9px 13px 11px; }
   .think-line {
-    font-family: var(--mono);
-    font-size: 11.5px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13.5px;
     line-height: 1.6;
     color: var(--dim);
-    padding: 2px 0 2px 14px;
-    border-left: 1px solid var(--line-2);
+    padding: 2px 0 2px 13px;
+    border-left: 1.5px solid rgba(91, 103, 216, 0.3);
     animation: tick-in 0.35s ease both;
   }
-
-  .think-line.tool { color: var(--accent-dim); }
-  .think-line.tool b { color: var(--accent); font-weight: 500; }
+  .think-line.tool { font-family: var(--sans); font-style: normal; font-size: 12px; color: var(--dim); }
+  .think-line.tool b { color: var(--accent); font-weight: 600; }
   .think-line.tool span { color: var(--faint); }
 
   /* ── Chat mode ───────────────────────────────────────────────────────────── */
-  /* Chat overlays the stage; the two cross-fade instead of hard-swapping, so
-     switching modes reads as one surface turning to another. */
   .chat-view {
     position: fixed;
-    inset: 54px 0 92px 0;
+    inset: 76px 0 100px 0;
     display: flex;
     justify-content: center;
+    z-index: 8;
     opacity: 0;
     visibility: hidden;
     transform: translateY(10px);
     pointer-events: none;
-    transition: opacity var(--t2) var(--ease-out),
-                transform var(--t2) var(--ease-out),
+    transition: opacity var(--t2) var(--ease-out), transform var(--t2) var(--ease-out),
                 visibility 0s linear var(--t2);
   }
   body.mode-chat .chat-view {
-    opacity: 1;
-    visibility: visible;
-    transform: none;
-    pointer-events: auto;
-    transition: opacity var(--t2) var(--ease-out),
-                transform var(--t2) var(--ease-out);
-  }
-
-  .stage { transition: opacity var(--t2) var(--ease-out), transform var(--t2) var(--ease-out); }
-  body.mode-chat .stage {
-    opacity: 0;
-    transform: scale(0.985);
-    pointer-events: none;
+    opacity: 1; visibility: visible; transform: none; pointer-events: auto;
+    transition: opacity var(--t2) var(--ease-out), transform var(--t2) var(--ease-out);
   }
   body.mode-chat .state-label { opacity: 0; }
 
   .chat-scroll {
-    width: min(740px, 100%);
+    width: min(720px, 100%);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding: 22px 6px 12px;
+    padding: 10px 14px 14px;
   }
 
   .chat-empty {
     margin: auto;
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.14em;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
     color: var(--faint);
-    text-transform: uppercase;
   }
 
   .turn { display: flex; flex-direction: column; }
 
   .msg-user {
     align-self: flex-end;
-    max-width: 78%;
-    padding: 12px 16px;
-    background: var(--accent-bg);
-    border: 1px solid rgba(98, 217, 232, 0.22);
-    border-radius: 13px 13px 4px 13px;
-    font-size: 15px;
+    max-width: 76%;
+    padding: 11px 16px;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.7);
+    border-radius: 16px 16px 5px 16px;
+    box-shadow: 0 10px 28px -14px rgba(40, 55, 95, 0.3);
+    font-size: 14.5px;
     line-height: 1.55;
     white-space: pre-wrap;
     overflow-wrap: break-word;
@@ -580,22 +629,39 @@
     width: fit-content;
     animation: enter-left var(--t2) var(--ease-out) both;
   }
+  @keyframes enter-right { from { opacity: 0; transform: translate(14px, 8px) scale(0.96); } to { opacity: 1; transform: none; } }
+  @keyframes enter-left  { from { opacity: 0; transform: translate(-10px, 10px) scale(0.985); } to { opacity: 1; transform: none; } }
 
-  @keyframes enter-right {
-    from { opacity: 0; transform: translate(16px, 8px) scale(0.96); }
-    to   { opacity: 1; transform: none; }
-  }
-  @keyframes enter-left {
-    from { opacity: 0; transform: translate(-10px, 10px) scale(0.985); }
-    to   { opacity: 1; transform: none; }
-  }
+  .msg-card { border-radius: 18px 18px 18px 6px; padding: 14px 18px 11px; }
 
-  /* Typing indicator — Caden gathering the reply */
-  .typing { display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; }
+  .msg-eyebrow {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .msg-body {
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.64;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  .msg-meta {
+    margin-top: 9px;
+    font-size: 10.5px;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .msg-assistant.error .msg-eyebrow { color: var(--warm); }
+
+  /* Typing indicator */
+  .typing { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; }
   .typing i {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--accent-dim);
+    width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(91, 103, 216, 0.55);
     animation: typing-bounce 1.25s var(--ease-inout) infinite;
   }
   .typing i:nth-child(2) { animation-delay: 0.16s; }
@@ -605,105 +671,56 @@
     35%           { opacity: 1;   transform: translateY(-4px); }
   }
 
-  /* Typewriter reveal — words surface as Caden speaks them */
+  /* Typewriter */
   .tw { opacity: 0; animation: tw-fade 0.42s var(--ease-out) forwards; }
   @keyframes tw-fade { to { opacity: 1; } }
   .caret {
     display: inline-block;
-    width: 2px;
-    height: 1.05em;
+    width: 2px; height: 1.02em;
     margin-left: 1px;
-    vertical-align: -0.16em;
+    vertical-align: -0.14em;
     background: var(--accent);
     animation: caret-blink 1s steps(1) infinite;
   }
   @keyframes caret-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 
-  .msg-card {
-    padding: 15px 18px 13px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 13px 13px 13px 4px;
-  }
-
-  .msg-eyebrow {
-    font-family: var(--mono);
-    font-size: 9px;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 9px;
-  }
-
-  .msg-body {
-    font-size: 15px;
-    line-height: 1.62;
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-  }
-  .msg-body:empty::after {
-    content: "…";
-    color: var(--faint);
-  }
-
-  .msg-meta {
-    margin-top: 10px;
-    font-family: var(--mono);
-    font-size: 9.5px;
-    color: var(--faint);
-    letter-spacing: 0.06em;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .msg-assistant.error .msg-card { border-color: rgba(232, 184, 114, 0.35); }
-  .msg-assistant.error .msg-eyebrow { color: var(--warm); }
-
-  /* ── State label ─────────────────────────────────────────────────────────── */
+  /* ── State label + input ─────────────────────────────────────────────────── */
   .state-label {
     position: fixed;
     bottom: 96px;
     left: 50%;
     transform: translateX(-50%);
-    font-family: var(--mono);
-    font-size: 9.5px;
-    letter-spacing: 0.34em;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.3em;
     text-transform: uppercase;
     color: var(--faint);
     white-space: nowrap;
     transition: color var(--t2), opacity var(--t2);
-    z-index: 5;
+    z-index: 12;
   }
   .state-label.listening { color: var(--accent); }
-  .state-label.thinking  { color: var(--dim); }
 
-  /* ── Input bar ───────────────────────────────────────────────────────────── */
   .input-bar {
     position: fixed;
-    bottom: 26px;
+    bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 15;
-    width: min(620px, calc(100vw - 44px));
+    z-index: 40;
+    width: min(600px, calc(100vw - 36px));
     display: flex;
     align-items: stretch;
-    background: rgba(10, 16, 24, 0.82);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border: 1px solid var(--line);
-    border-radius: 13px;
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
-    transition: border-color var(--t2) var(--ease-out), box-shadow var(--t2) var(--ease-out);
+    border-radius: 17px;
+    overflow: hidden;
+    transition: box-shadow var(--t2) var(--ease-out);
   }
-  .input-bar:focus-within {
-    border-color: rgba(98, 217, 232, 0.4);
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5), 0 0 0 4px rgba(98, 217, 232, 0.07);
-  }
+  .input-bar:focus-within { box-shadow: var(--glass-shadow), var(--glass-inner), 0 0 0 4px rgba(91, 103, 216, 0.12); }
 
   .input-field {
     flex: 1;
     font-family: var(--sans);
     font-size: 15px;
-    color: var(--text);
+    color: var(--ink);
     background: transparent;
     border: none;
     outline: none;
@@ -718,44 +735,43 @@
     align-items: center;
     justify-content: center;
     color: var(--dim);
-    transition: color 0.15s, background 0.15s;
+    transition: color var(--t1), background var(--t1);
+    border-left: 1px solid rgba(90, 105, 145, 0.16);
   }
-  .input-send-btn { border-left: 1px solid var(--line); }
   .input-send-btn svg { transition: transform var(--t1) var(--ease-out); }
   .input-send-btn:hover { color: var(--accent); }
   .input-send-btn:hover svg { transform: translateX(2px); }
-
-  .input-mic-btn { border-left: 1px solid var(--line); border-radius: 0 12px 12px 0; }
   .input-mic-btn:hover { color: var(--accent); }
-  .input-mic-btn.is-active { background: var(--accent-bg); color: var(--accent); }
+  .input-mic-btn.is-active { background: var(--accent-soft); color: var(--accent); }
 
-  /* ── Telemetry line ──────────────────────────────────────────────────────── */
   .telemetry {
     position: fixed;
-    bottom: 12px;
-    left: 16px;
-    z-index: 5;
+    bottom: 10px;
+    left: 14px;
+    z-index: 12;
     font-family: var(--mono);
     font-size: 9px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     color: var(--faint);
     font-variant-numeric: tabular-nums;
     user-select: none;
   }
 
   @media (max-width: 760px) {
-    .answer-panel { right: 50%; transform: translate(50%, -50%) translateY(24px); width: min(480px, calc(100vw - 40px)); top: auto; bottom: 120px; }
-    .answer-panel.visible { transform: translate(50%, 0); top: auto; }
-    .orb-wrap.drifted { transform: translateY(-16vh) scale(0.6); }
-    .controls { gap: 6px; }
+    .answer-panel { right: 50%; transform: translate(50%, 0) translateY(24px); width: min(470px, calc(100vw - 28px)); top: auto; bottom: 116px; }
+    .answer-panel.visible { transform: translate(50%, 0); }
+    .topbar { padding-left: 14px; }
+    .wordmark { font-size: 18px; }
     .telemetry { display: none; }
+    .orb { width: 150px; height: 150px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .orb-core, .orb-ring, .orb-halo, .blob, .bar,
-    .typing i, .caret, .msg-user, .msg-assistant, .tw,
+    .orb-core, .orb-halo, .blob, .bar, .cloud,
+    .typing i, .caret, .msg-user, .msg-assistant, .tw, .cwin,
     .js.booted .boot, .js.booted .boot-orb { animation: none !important; }
-    .js .boot, .js .boot-orb { opacity: 1 !important; }
+    .js .boot { opacity: 1 !important; }
+    .js .boot-orb { opacity: 1 !important; transform: translate(-50%, -50%) !important; }
     .tw { opacity: 1 !important; }
     * { transition-duration: 0.001s !important; }
   }
@@ -763,56 +779,61 @@
 </head>
 <body>
 
-<header class="topbar boot boot-1">
-  <div class="wordmark">CADEN<span>.</span></div>
+<div class="sky" aria-hidden="true">
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
+  <div class="cloud c3"></div>
+</div>
+
+<header class="topbar glass boot boot-1">
+  <div class="wordmark">Caden</div>
   <div class="controls">
-    <div class="seg" role="tablist" aria-label="View mode">
+    <div class="seg" role="tablist" aria-label="View">
       <button id="modeCanvasBtn" class="on" role="tab" aria-selected="true">Canvas</button>
       <button id="modeChatBtn" role="tab" aria-selected="false">Chat</button>
     </div>
-    <select class="agent-select" id="agentSelect" aria-label="Agent">
+    <select class="agent-select" id="agentSelect" aria-label="Mode">
       <option value="caden">Caden</option>
-      <option value="analyst">Analyst</option>
+      <option value="researcher">Research</option>
       <option value="scout">Scout</option>
     </select>
-    <button class="ghost-btn" id="newChatBtn" title="Start a new conversation">New</button>
+    <button class="icon-toggle" id="soundBtn" title="Sound" aria-label="Toggle sound" aria-pressed="true">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 5 6.5 9H3v6h3.5L11 19V5Z"/>
+        <path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
+        <path class="wave" d="M18.5 6a9 9 0 0 1 0 12"/>
+      </svg>
+    </button>
+    <button class="ghost-btn" id="newChatBtn" title="Start fresh">New</button>
   </div>
 </header>
 
-<!-- Canvas mode -->
+<!-- Canvas -->
 <main class="stage" id="stage">
   <div class="orb-wrap boot-orb" id="orbWrap">
     <div class="orb" id="orb">
       <div class="orb-halo"></div>
-      <div class="orb-ring"></div>
-      <div class="orb-ring r2"></div>
       <div class="orb-core"></div>
       <svg class="think-svg" viewBox="-100 -100 200 200" aria-hidden="true">
         <defs>
-          <radialGradient id="thinkGrad" cx="38%" cy="34%" r="80%">
-            <stop offset="0%"  stop-color="#F2FCFF"/>
-            <stop offset="38%" stop-color="#7FDFF0"/>
-            <stop offset="75%" stop-color="#2E93AC"/>
-            <stop offset="100%" stop-color="#0C3C4D"/>
+          <radialGradient id="thinkGrad" cx="36%" cy="30%" r="82%">
+            <stop offset="0%"  stop-color="#FFFFFF"/>
+            <stop offset="38%" stop-color="#DCE8FA"/>
+            <stop offset="72%" stop-color="#A3B4EA"/>
+            <stop offset="100%" stop-color="#6B77C8"/>
           </radialGradient>
-          <!-- Gooey metaball filter: blur + alpha threshold fuses nearby blobs.
-               filterUnits pins the region to the whole canvas so blobs stay
-               visible as they orbit outward. -->
-          <filter id="caden-goo" filterUnits="userSpaceOnUse"
-                  x="-100" y="-100" width="200" height="200">
+          <filter id="caden-goo" filterUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200">
             <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
             <feColorMatrix in="b" type="matrix"
               values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9"/>
           </filter>
-          <!-- Same fusion, then softened and tinted — a luminous aura behind -->
-          <filter id="caden-goo-glow" filterUnits="userSpaceOnUse"
-                  x="-100" y="-100" width="200" height="200">
+          <filter id="caden-goo-glow" filterUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200">
             <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
             <feColorMatrix in="b" type="matrix"
               values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" result="goo"/>
             <feGaussianBlur in="goo" stdDeviation="10" result="soft"/>
             <feColorMatrix in="soft" type="matrix"
-              values="0 0 0 0 0.38  0 0 0 0 0.85  0 0 0 0 0.91  0 0 0 0.55 0"/>
+              values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0"/>
           </filter>
         </defs>
         <g class="think-blobs think-glow" filter="url(#caden-goo-glow)">
@@ -833,9 +854,12 @@
     <div class="think-ticker" id="thinkTicker" aria-live="polite"></div>
   </div>
 
+  <!-- Windows Caden opens live here -->
+  <div class="win-layer" id="winLayer"></div>
+
   <!-- Answer panel -->
   <div class="answer-panel" id="answerPanel">
-    <div class="answer-card">
+    <div class="answer-card glass">
       <div class="answer-eyebrow" id="answerLabel">Caden</div>
       <div id="answerThink"></div>
       <div class="answer-body" id="answerBody"></div>
@@ -843,10 +867,10 @@
         <span class="answer-meta-label" id="answerMetaLabel"></span>
         <div class="answer-actions">
           <button class="icon-btn" title="Copy" id="copyBtn" aria-label="Copy answer">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
           <button class="icon-btn" title="Dismiss" id="dismissBtn" aria-label="Dismiss answer">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </div>
       </div>
@@ -854,31 +878,30 @@
   </div>
 </main>
 
-<!-- Chat mode -->
+<!-- Chat -->
 <section class="chat-view" id="chatView" aria-label="Conversation">
   <div class="chat-scroll" id="chatScroll">
-    <div class="chat-empty" id="chatEmpty">No conversation yet</div>
+    <div class="chat-empty" id="chatEmpty">Nothing yet — ask anything.</div>
   </div>
 </section>
 
-<div class="state-label boot boot-2" id="stateLabel">standing by</div>
+<div class="state-label boot boot-2" id="stateLabel">here</div>
 
-<!-- Input -->
-<div class="input-bar boot boot-3">
+<div class="input-bar glass boot boot-3">
   <input
     class="input-field"
     id="inputField"
     type="text"
-    placeholder="Message Caden"
+    placeholder="Ask anything"
     autocomplete="off"
     spellcheck="false"
-    aria-label="Message Caden"
+    aria-label="Ask Caden"
   />
   <button class="input-send-btn" id="sendBtn" title="Send" aria-label="Send">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
   </button>
-  <button class="input-mic-btn" id="micBtn" title="Voice input" aria-label="Voice input">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <button class="input-mic-btn" id="micBtn" title="Voice" aria-label="Voice input">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
       <rect x="9" y="2.5" width="6" height="11" rx="3"/>
       <path d="M5.5 11a6.5 6.5 0 0 0 13 0"/>
       <path d="M12 17.5V21"/>
@@ -895,20 +918,19 @@
   'use strict';
 
   // ── Backend ─────────────────────────────────────────────────────────────────
-  // The anon key is a public, publishable key — safe to ship in a static
-  // frontend. It only authorizes invoking the function; the secret
-  // service-role key lives server-side as a function secret.
+  // The anon key is public and safe to ship; the secret service-role key
+  // lives server-side as a function secret.
   const API = {
     endpoint: 'https://lrjiopczasvcrhglweth.supabase.co/functions/v1/chat',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxyamlvcGN6YXN2Y3JoZ2x3ZXRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MTc0NzAsImV4cCI6MjA5ODQ5MzQ3MH0.D_d-1AvzZQNSnC4tlEEy1dcgAyGEZ2-SxcHwV94nOs4',
   };
 
-  const AGENT_LABELS = { caden: 'Caden', analyst: 'Caden — Analyst', scout: 'Caden — Scout' };
-  const STORAGE_KEY = 'caden.session.v2';
+  const AGENT_LABELS = { caden: 'Caden', researcher: 'Caden — Research', scout: 'Caden — Scout' };
+  const STORAGE_KEY = 'caden.session.v3';
 
   // ── Elements ────────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
-  const orb = $('orb'), orbWrap = $('orbWrap');
+  const orb = $('orb'), orbWrap = $('orbWrap'), winLayer = $('winLayer');
   const answerPanel = $('answerPanel'), answerBody = $('answerBody');
   const answerLabel = $('answerLabel'), answerMetaLabel = $('answerMetaLabel');
   const answerThink = $('answerThink');
@@ -919,11 +941,109 @@
   const chatScroll = $('chatScroll'), chatEmpty = $('chatEmpty');
   const modeCanvasBtn = $('modeCanvasBtn'), modeChatBtn = $('modeChatBtn');
   const agentSelect = $('agentSelect'), newChatBtn = $('newChatBtn');
-  const telemetry = $('telemetry');
+  const soundBtn = $('soundBtn'), telemetry = $('telemetry');
+
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── Sky: pick a palette from the actual hour ────────────────────────────────
+  (function paintSky() {
+    const h = new Date().getHours();
+    const skies = {
+      dawn:  ['#AEB9DC', '#D3CFE6', '#F2DCCB', '#F8E7D6'],
+      day:   ['#9DBBE0', '#C2D7EC', '#E8EFF5', '#F4F1EA'],
+      dusk:  ['#8E93C9', '#C0AFD6', '#EFC9AE', '#F6DCC0'],
+      night: ['#6C74A6', '#9490BE', '#CBB3BE', '#E5CDBB'],
+    };
+    const key = h >= 5 && h < 8 ? 'dawn' : h >= 8 && h < 17 ? 'day' : h >= 17 && h < 21 ? 'dusk' : 'night';
+    skies[key].forEach((c, i) => document.documentElement.style.setProperty(`--sky-${i + 1}`, c));
+  })();
+
+  // ── Sound: soft synthesized chimes + a barely-there ambient bed ─────────────
+  const Sound = {
+    ctx: null,
+    master: null,
+    ambientNodes: null,
+    enabled: true,
+    ensure() {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return false;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = 1;
+        this.master.connect(this.ctx.destination);
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+      return true;
+    },
+    bell(freq, delay = 0, dur = 1.4, gain = 0.04) {
+      if (!this.enabled || !this.ensure()) return;
+      const t = this.ctx.currentTime + delay;
+      // Two partials through a lowpass — glassy, not electronic
+      for (const [ratio, g] of [[1, gain], [2.76, gain * 0.22]]) {
+        const osc = this.ctx.createOscillator();
+        const env = this.ctx.createGain();
+        const lp = this.ctx.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 4200;
+        osc.type = 'sine';
+        osc.frequency.value = freq * ratio;
+        env.gain.setValueAtTime(0.0001, t);
+        env.gain.exponentialRampToValueAtTime(g, t + 0.012);
+        env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        osc.connect(env); env.connect(lp); lp.connect(this.master);
+        osc.start(t); osc.stop(t + dur + 0.1);
+      }
+    },
+    send()   { this.bell(1174.66, 0, 0.6, 0.028); },                              // D6, a soft tick
+    arrive() { this.bell(659.25, 0, 1.5, 0.042); this.bell(987.77, 0.1, 1.7, 0.028); }, // E5 → B5
+    window() { this.bell(880, 0, 0.9, 0.024); },                                  // A5
+    agent()  { this.bell(783.99, 0, 1.2, 0.03); },                                // G5
+    error()  { this.bell(329.63, 0, 1.0, 0.035); },                               // E4, low + gentle
+    ambientStart() {
+      if (!this.enabled || !this.ensure() || this.ambientNodes) return;
+      const nodes = [];
+      for (const [freq, g] of [[98, 0.006], [147.2, 0.004]]) {
+        const osc = this.ctx.createOscillator();
+        const env = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        env.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        env.gain.linearRampToValueAtTime(g, this.ctx.currentTime + 6);
+        osc.connect(env); env.connect(this.master);
+        osc.start();
+        nodes.push({ osc, env });
+      }
+      this.ambientNodes = nodes;
+    },
+    ambientStop() {
+      if (!this.ambientNodes) return;
+      for (const { osc, env } of this.ambientNodes) {
+        env.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 1.5);
+        osc.stop(this.ctx.currentTime + 2);
+      }
+      this.ambientNodes = null;
+    },
+    setEnabled(on) {
+      this.enabled = on;
+      try { localStorage.setItem('caden.sound', on ? '1' : '0'); } catch {}
+      if (on) this.ambientStart(); else this.ambientStop();
+    },
+  };
+  try { Sound.enabled = localStorage.getItem('caden.sound') !== '0'; } catch {}
+
+  function syncSoundBtn() {
+    soundBtn.classList.toggle('off', !Sound.enabled);
+    soundBtn.setAttribute('aria-pressed', String(Sound.enabled));
+  }
+  soundBtn.addEventListener('click', () => { Sound.setEnabled(!Sound.enabled); syncSoundBtn(); });
+  syncSoundBtn();
+
+  // Audio can only start after a gesture — arm it on the first one.
+  const armAudio = () => { if (Sound.enabled) { Sound.ensure(); Sound.ambientStart(); } };
+  window.addEventListener('pointerdown', armAudio, { once: true });
+  window.addEventListener('keydown', armAudio, { once: true });
 
   // ── Thinking cluster geometry ───────────────────────────────────────────────
-  // N spokes, each with a gradient fill blob and a matching glow blob behind,
-  // so the metaballs read as one luminous liquid while splitting and merging.
   (function buildThinkCluster() {
     const SVG = 'http://www.w3.org/2000/svg';
     const layers = [document.querySelector('.think-glow'), document.querySelector('.think-fill')];
@@ -937,7 +1057,7 @@
         const c = document.createElementNS(SVG, 'circle');
         c.setAttribute('class', 'blob');
         c.setAttribute('r', radii[i]);
-        c.setAttribute('fill', layer.classList.contains('think-fill') ? 'url(#thinkGrad)' : '#62D9E8');
+        c.setAttribute('fill', layer.classList.contains('think-fill') ? 'url(#thinkGrad)' : '#FFFFFF');
         c.style.animationDelay = delay;
         spoke.appendChild(c);
         layer.appendChild(spoke);
@@ -946,13 +1066,16 @@
   })();
 
   // ── Session state ───────────────────────────────────────────────────────────
-  let mode = 'canvas';               // 'canvas' | 'chat'
+  let mode = 'canvas';
   let agent = 'caden';
-  let history = [];                  // OpenAI messages (no system — server adds it)
-  let log = [];                      // render log: {role, text, thinking, steps, meta, err}
+  let history = [];        // OpenAI messages (server adds the system prompt)
+  let log = [];            // chat render log
+  let windows = [];        // live canvas windows: {id,title,x,y,width,text,html,kind,task}
+  let orbPos = { x: 50, y: 42, custom: false };
   let currentState = 'idle';
   let inFlight = false;
   let lastMs = null;
+  let zSeq = 20;
 
   const sessId = (() => {
     const buf = new Uint8Array(3);
@@ -962,10 +1085,9 @@
 
   function save() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, agent, history, log }));
-    } catch { /* storage full or unavailable — session just won't persist */ }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, agent, history, log, windows, orbPos }));
+    } catch { /* persistence is best-effort */ }
   }
-
   function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -975,6 +1097,8 @@
       if (AGENT_LABELS[s.agent]) agent = s.agent;
       if (Array.isArray(s.history)) history = s.history;
       if (Array.isArray(s.log)) log = s.log;
+      if (Array.isArray(s.windows)) windows = s.windows;
+      if (s.orbPos && typeof s.orbPos.x === 'number') orbPos = s.orbPos;
     } catch { /* corrupt state — start fresh */ }
   }
 
@@ -982,13 +1106,17 @@
     const ms = lastMs != null ? ` · ${(lastMs / 1000).toFixed(1)}s` : '';
     telemetry.textContent = `${sessId} · ${agent}${ms}`;
   }
+  const timestamp = () => new Date().toLocaleTimeString('en-GB', { hour12: false });
 
-  function timestamp() {
-    return new Date().toLocaleTimeString('en-GB', { hour12: false });
+  // ── Orb position ────────────────────────────────────────────────────────────
+  function setOrbPos(x, y, custom) {
+    orbPos = { x, y, custom };
+    orbWrap.style.setProperty('--orb-x', x + '%');
+    orbWrap.style.setProperty('--orb-y', y + '%');
   }
 
   // ── State machine ───────────────────────────────────────────────────────────
-  const STATE_TEXT = { idle: 'standing by', listening: 'listening', thinking: 'thinking', speaking: 'responding' };
+  const STATE_TEXT = { idle: 'here', listening: 'listening', thinking: 'thinking', speaking: 'speaking' };
 
   function setState(s) {
     currentState = s;
@@ -1000,31 +1128,191 @@
     thinkTicker.classList.toggle('visible', s === 'thinking');
     if (s !== 'thinking') thinkTicker.textContent = '';
 
-    stateLabel.className = 'state-label' +
-      (s === 'listening' ? ' listening' : s === 'thinking' ? ' thinking' : '');
+    stateLabel.className = 'state-label' + (s === 'listening' ? ' listening' : '');
     stateLabel.textContent = STATE_TEXT[s];
 
     if (s === 'speaking') {
-      orbWrap.classList.add('drifted');
+      if (!orbPos.custom) setOrbPos(31, 42, false);
       answerPanel.classList.add('visible');
     } else {
-      orbWrap.classList.remove('drifted');
+      if (s === 'idle' && !orbPos.custom) setOrbPos(50, 42, false);
       answerPanel.classList.remove('visible');
     }
   }
 
-  // ── Thinking capsule builder (shared by chat + answer panel) ────────────────
+  // ── Canvas windows ──────────────────────────────────────────────────────────
+  const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/g;
+
+  function renderRich(el, text) {
+    el.textContent = '';
+    const parts = String(text ?? '').split(URL_RE);
+    for (const part of parts) {
+      if (/^https?:\/\//.test(part)) {
+        const a = document.createElement('a');
+        a.href = part;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = part.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60);
+        el.appendChild(a);
+      } else if (part) {
+        el.appendChild(document.createTextNode(part));
+      }
+    }
+  }
+
+  function createWindow(w, { typeIn = false } = {}) {
+    removeWindowEl(w.id);
+    const el = document.createElement('div');
+    el.className = 'cwin glass' + (w.kind === 'agent' ? ' agent working' : '');
+    el.dataset.id = w.id;
+    el.style.left = `min(${w.x}%, calc(100vw - 120px))`;
+    el.style.top = `min(${w.y}%, calc(100vh - 120px))`;
+    el.style.width = (w.width || 380) + 'px';
+    el.style.zIndex = ++zSeq;
+
+    const bar = document.createElement('div');
+    bar.className = 'cwin-bar';
+    const title = document.createElement('div');
+    title.className = 'cwin-title';
+    title.textContent = w.title;
+    const close = document.createElement('button');
+    close.className = 'cwin-close';
+    close.setAttribute('aria-label', 'Close window');
+    close.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    close.addEventListener('click', () => closeWindow(w.id));
+    bar.append(title, close);
+
+    const body = document.createElement('div');
+    body.className = 'cwin-body';
+
+    if (w.html) {
+      body.classList.add('has-frame');
+      const frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', 'allow-scripts');   // isolated: no same-origin access
+      frame.srcdoc = `<!doctype html><html><head><style>
+        body{font-family:Inter,system-ui,sans-serif;margin:14px;color:#232838;font-size:14px;line-height:1.55;background:transparent}
+        a{color:#5B67D8}</style></head><body>${w.html}</body></html>`;
+      body.appendChild(frame);
+    } else if (w.kind === 'agent') {
+      const task = document.createElement('div');
+      task.className = 'agent-task';
+      task.textContent = w.task || '';
+      const findings = document.createElement('div');
+      body.append(task, findings);
+      if (typeIn && !reducedMotion) {
+        setTimeout(() => {
+          el.classList.remove('working');
+          typewriter(findings, w.text || '', { rich: true });
+          Sound.agent();
+        }, 900 + Math.random() * 700);
+      } else {
+        el.classList.remove('working');
+        renderRich(findings, w.text || '');
+      }
+    } else {
+      renderRich(body, w.text || '');
+    }
+
+    el.append(bar, body);
+    winLayer.appendChild(el);
+
+    // Bring to front on interaction
+    el.addEventListener('pointerdown', () => { el.style.zIndex = ++zSeq; });
+
+    // Drag by the title bar
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.cwin-close')) return;
+      e.preventDefault();
+      bar.setPointerCapture(e.pointerId);
+      const rect = el.getBoundingClientRect();
+      const dx = e.clientX - rect.left, dy = e.clientY - rect.top;
+      const onMove = (ev) => {
+        el.style.left = Math.max(4, Math.min(innerWidth - 80, ev.clientX - dx)) + 'px';
+        el.style.top = Math.max(4, Math.min(innerHeight - 60, ev.clientY - dy)) + 'px';
+      };
+      const onUp = (ev) => {
+        bar.removeEventListener('pointermove', onMove);
+        bar.removeEventListener('pointerup', onUp);
+        const r = el.getBoundingClientRect();
+        const rec = windows.find((x) => x.id === w.id);
+        if (rec) { rec.x = (r.left / innerWidth) * 100; rec.y = (r.top / innerHeight) * 100; save(); }
+      };
+      bar.addEventListener('pointermove', onMove);
+      bar.addEventListener('pointerup', onUp);
+    });
+
+    return el;
+  }
+
+  function removeWindowEl(id) {
+    winLayer.querySelector(`[data-id="${CSS.escape(id)}"]`)?.remove();
+  }
+
+  function closeWindow(id) {
+    const el = winLayer.querySelector(`[data-id="${CSS.escape(id)}"]`);
+    if (el) { el.classList.add('closing'); setTimeout(() => el.remove(), 300); }
+    windows = windows.filter((w) => w.id !== id);
+    save();
+  }
+
+  function renderWindows() {
+    winLayer.innerHTML = '';
+    for (const w of windows) createWindow(w);
+  }
+
+  // ── Actions from the backend — Caden shaping its canvas ────────────────────
+  let actionSeq = 0;
+  function runActions(actions) {
+    if (!Array.isArray(actions)) return;
+    actions.forEach((a, i) => {
+      setTimeout(() => applyAction(a), 420 * i);
+    });
+  }
+
+  function applyAction(a) {
+    switch (a.type) {
+      case 'move_orb':
+        setOrbPos(a.x, a.y, true);
+        save();
+        break;
+      case 'spawn_window': {
+        const w = {
+          id: a.id || 'w' + (++actionSeq), title: a.title || 'Untitled',
+          x: a.x, y: a.y, width: a.width, text: a.text, html: a.html, kind: 'window',
+        };
+        windows.push(w);
+        createWindow(w);
+        Sound.window();
+        save();
+        break;
+      }
+      case 'close_window':
+        closeWindow(a.id);
+        break;
+      case 'spawn_agent': {
+        const w = {
+          id: 'agent-' + (++actionSeq) + '-' + Date.now().toString(36),
+          title: a.name || 'Agent', task: a.task || '', text: a.findings || '',
+          x: a.x ?? 18, y: a.y ?? 24, width: 340, kind: 'agent',
+        };
+        windows.push(w);
+        createWindow(w, { typeIn: true });
+        save();
+        break;
+      }
+    }
+  }
+
+  // ── Thinking capsule ────────────────────────────────────────────────────────
   function buildCapsule({ live } = {}) {
     const details = document.createElement('details');
     details.className = 'think-capsule' + (live ? ' live' : '');
     if (live) details.open = true;
-
     const summary = document.createElement('summary');
     summary.textContent = live ? 'thinking' : 'thought process';
     const body = document.createElement('div');
     body.className = 'think-body';
     details.append(summary, body);
-
     return {
       el: details,
       addLine(text) {
@@ -1040,7 +1328,7 @@
         const name = document.createElement('b');
         name.textContent = step.tool;
         const args = document.createElement('span');
-        args.textContent = `(${step.arguments}) `;
+        args.textContent = ` ${step.arguments} `;
         line.append(name, args, document.createTextNode('→ ' + step.result));
         body.appendChild(line);
         return line;
@@ -1050,14 +1338,11 @@
         details.open = false;
         summary.textContent = `thought for ${seconds.toFixed(1)}s · ${count} step${count === 1 ? '' : 's'}`;
       },
-      isEmpty() { return body.childElementCount === 0; },
     };
   }
 
   // ── Chat rendering ──────────────────────────────────────────────────────────
-  function scrollChat() {
-    chatScroll.scrollTop = chatScroll.scrollHeight;
-  }
+  function scrollChat() { chatScroll.scrollTop = chatScroll.scrollHeight; }
 
   function addUserTurn(text) {
     chatEmpty.style.display = 'none';
@@ -1083,16 +1368,15 @@
       capsule = buildCapsule({ live: false });
       (thinking || []).forEach((l) => capsule.addLine(l));
       (steps || []).forEach((s) => capsule.addToolStep(s));
-      capsule.el.open = !!capsuleOpen;
       if (meta && meta.seconds != null) {
         capsule.finish(meta.seconds, (thinking?.length || 0) + (steps?.length || 0));
-        capsule.el.open = !!capsuleOpen;
       }
+      capsule.el.open = !!capsuleOpen;
       wrap.appendChild(capsule.el);
     }
 
     const card = document.createElement('div');
-    card.className = 'msg-card';
+    card.className = 'msg-card glass';
     const eyebrow = document.createElement('div');
     eyebrow.className = 'msg-eyebrow';
     eyebrow.textContent = err ? 'Caden — offline' : (AGENT_LABELS[meta?.agent] || 'Caden');
@@ -1111,7 +1395,6 @@
   }
 
   function renderLog() {
-    // Rebuild the chat view from the persisted log (page load / new chat).
     [...chatScroll.querySelectorAll('.turn')].forEach((el) => el.remove());
     chatEmpty.style.display = log.length ? 'none' : '';
     for (const entry of log) {
@@ -1121,8 +1404,6 @@
   }
 
   // ── Motion helpers ──────────────────────────────────────────────────────────
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-
   function showTyping(el) {
     el.innerHTML = '';
     const t = document.createElement('span');
@@ -1131,19 +1412,25 @@
     el.appendChild(t);
   }
 
-  // Reveal text word-by-word with a trailing caret — Caden speaking, not pasting.
-  function typewriter(el, text) {
+  function typewriter(el, text, { rich = false } = {}) {
     return new Promise((resolve) => {
       el.textContent = '';
-      if (reducedMotion || !text) { el.textContent = text || ''; resolve(); return; }
+      if (reducedMotion || !text) {
+        if (rich) renderRich(el, text || ''); else el.textContent = text || '';
+        resolve(); return;
+      }
       const tokens = text.match(/\S+\s*/g) || [text];
-      const per = Math.max(1, Math.ceil(tokens.length / 55));   // cap long answers at ~55 ticks
+      const per = Math.max(1, Math.ceil(tokens.length / 55));
       const caret = document.createElement('span');
       caret.className = 'caret';
       el.appendChild(caret);
       let i = 0;
       const step = () => {
-        if (i >= tokens.length) { caret.remove(); resolve(); return; }
+        if (i >= tokens.length) {
+          caret.remove();
+          if (rich) renderRich(el, text);   // swap in linkified version at the end
+          resolve(); return;
+        }
         let chunk = '';
         for (let k = 0; k < per && i < tokens.length; k++, i++) chunk += tokens[i];
         const span = document.createElement('span');
@@ -1178,7 +1465,7 @@
     if (!e) return '';
     if (typeof e === 'string') return e;
     if (e.error) return [e.error, e.groq, e.gemini].filter(Boolean).join(' — ');
-    try { return JSON.stringify(e); } catch { return 'Unknown error.'; }
+    try { return JSON.stringify(e); } catch { return 'Something went wrong.'; }
   }
 
   async function ask(text) {
@@ -1187,6 +1474,7 @@
     if (!prompt) return;
 
     inFlight = true;
+    Sound.send();
     const t0 = performance.now();
     history.push({ role: 'user', content: prompt });
     log.push({ role: 'user', text: prompt });
@@ -1194,17 +1482,16 @@
     save();
     setState('thinking');
 
-    // Live view: a capsule in chat, a ticker under the orb in canvas.
     const liveTurn = addAssistantTurn({ text: '', thinking: [], steps: [], meta: { agent } });
     const liveCapsule = buildCapsule({ live: true });
     liveTurn.wrap.prepend(liveCapsule.el);
-    showTyping(liveTurn.bodyEl);   // dots until the reply lands
+    showTyping(liveTurn.bodyEl);
 
     const thinkingLines = [];
     let steps = [];
 
     try {
-      // Phase 1 — plan: genuine model reasoning, shown as it becomes available.
+      // Phase 1 — plan: real model reasoning, streamed into view.
       let planText = '';
       try {
         const plan = await callApi({ phase: 'plan', agent, messages: history });
@@ -1223,11 +1510,11 @@
               thinkTicker.appendChild(t);
             }
             scrollChat();
-          }, i * 420);
+          }, i * 460);
         });
       } catch { /* plan is best-effort */ }
 
-      // Phase 2 — answer, grounded in the plan.
+      // Phase 2 — the real work: tools, agents, canvas directives.
       const data = await callApi({ agent, messages: history, plan: planText });
       const reply = data.choices?.[0]?.message?.content?.trim();
       if (!reply) throw new Error('Empty response.');
@@ -1236,8 +1523,6 @@
       lastMs = performance.now() - t0;
       const seconds = lastMs / 1000;
 
-      // Make sure every plan line is present (timers may still be pending),
-      // then append tool steps and settle the capsule.
       const planLines = planText ? planText.split('\n').filter(Boolean) : [];
       planLines.slice(thinkingLines.length).forEach((l) => { thinkingLines.push(l); liveCapsule.addLine(l); });
       steps.forEach((s) => liveCapsule.addToolStep(s));
@@ -1254,7 +1539,7 @@
       log.push({ role: 'assistant', text: reply, thinking: thinkingLines, steps, meta });
       save();
 
-      // Canvas answer panel — thinking + meta ready before the words arrive
+      // Canvas answer panel
       answerLabel.textContent = AGENT_LABELS[agent] || 'Caden';
       answerMetaLabel.textContent = metaLine;
       answerThink.innerHTML = '';
@@ -1267,9 +1552,12 @@
       }
 
       updateTelemetry();
+      Sound.arrive();
       setState(mode === 'canvas' ? 'speaking' : 'idle');
 
-      // Type the reply into whichever surface is visible; the other gets it whole.
+      // Caden reshapes the canvas — windows, agents, movement.
+      runActions(data.caden?.actions);
+
       if (mode === 'canvas') {
         liveTurn.bodyEl.textContent = reply;
         await typewriter(answerBody, reply);
@@ -1279,7 +1567,6 @@
       }
       scrollChat();
     } catch (err) {
-      // Drop the failed turn from history so a retry is clean.
       if (history[history.length - 1]?.role === 'user') history.pop();
       if (log[log.length - 1]?.role === 'user') log.pop();
       save();
@@ -1296,6 +1583,7 @@
       answerMetaLabel.textContent = timestamp();
       answerThink.innerHTML = '';
 
+      Sound.error();
       setState(mode === 'canvas' ? 'speaking' : 'idle');
       scrollChat();
     } finally {
@@ -1314,7 +1602,6 @@
     if (m === 'chat') { setState('idle'); scrollChat(); }
     save();
   }
-
   modeCanvasBtn.addEventListener('click', () => setMode('canvas'));
   modeChatBtn.addEventListener('click', () => setMode('chat'));
 
@@ -1325,10 +1612,10 @@
   });
 
   newChatBtn.addEventListener('click', () => {
-    history = [];
-    log = [];
-    lastMs = null;
+    history = []; log = []; windows = []; lastMs = null;
     renderLog();
+    renderWindows();
+    setOrbPos(50, 42, false);
     answerThink.innerHTML = '';
     answerBody.textContent = '';
     setState('idle');
@@ -1350,35 +1637,27 @@
     navigator.clipboard?.writeText(answerBody.textContent).catch(() => {});
   });
 
-  // ── Voice (browser speech-to-text; a dedicated pipeline can replace this) ──
+  // ── Voice ───────────────────────────────────────────────────────────────────
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognizer = null;
-
   if (SpeechRec) {
     recognizer = new SpeechRec();
     recognizer.lang = 'en-US';
     recognizer.interimResults = false;
     recognizer.maxAlternatives = 1;
-
-    recognizer.addEventListener('result', (e) => {
-      inputField.value = e.results[0][0].transcript;
-    });
+    recognizer.addEventListener('result', (e) => { inputField.value = e.results[0][0].transcript; });
     recognizer.addEventListener('end', () => {
       if (currentState !== 'listening') return;
       const said = inputField.value.trim();
       inputField.value = '';
-      if (said) ask(said);
-      else setState('idle');
+      if (said) ask(said); else setState('idle');
     });
-    recognizer.addEventListener('error', () => {
-      if (currentState === 'listening') setState('idle');
-    });
+    recognizer.addEventListener('error', () => { if (currentState === 'listening') setState('idle'); });
   }
-
   micBtn.addEventListener('click', () => {
     if (!recognizer) {
       inputField.placeholder = 'Voice needs Chrome, Edge or Safari — type instead';
-      setTimeout(() => { inputField.placeholder = 'Message Caden'; }, 3500);
+      setTimeout(() => { inputField.placeholder = 'Ask anything'; }, 3500);
       return;
     }
     if (currentState === 'listening') {
@@ -1394,13 +1673,14 @@
   load();
   agentSelect.value = agent;
   renderLog();
+  renderWindows();
+  setOrbPos(orbPos.x, orbPos.y, orbPos.custom);
   setMode(mode);
   setState('idle');
   updateTelemetry();
 
-  // Play the entrance once the first frame is ready. Added to <html> (not
-  // <body>) so it lands on the same element as the 'js' class — the CSS
-  // reveal selector is `.js.booted .boot`, which needs both classes on one node.
+  // Play the entrance once the first frame is ready. Both classes live on
+  // <html> — the reveal selector is `.js.booted .boot`.
   requestAnimationFrame(() => document.documentElement.classList.add('booted'));
 })();
 </script>
