@@ -9,24 +9,38 @@
 // Request extensions beyond the OpenAI shape:
 //   agent:            "caden" | "researcher" | "scout" — server-side persona +
 //                     model-profile preset.
+//   surface:          "canvas" | "chat" (default "canvas") — which client UI
+//                     is asking. Canvas tools (move_orb, spawn_window,
+//                     close_window, spawn_agent, image_search, fit_canvas,
+//                     view_canvas) and the canvas-shaping/layout-awareness
+//                     instructions are only offered when surface is
+//                     "canvas"; a plain chat thread never sees them, since
+//                     there is nothing there to render them.
 //   model:            optional profile override ("orchestrator" | "fast" | "deep")
 //   max_tool_rounds:  agent-loop cap (defaults per agent)
 //   phase: "plan":    fast private-reasoning pass returning thinking lines,
 //                     rendered live in the UI while the answer generates.
 //   plan:             thinking text from a prior plan phase, injected as context.
+//   canvas:           (canvas surface only) client-reported layout — viewport,
+//                     orb position, every open window's position/size — turned
+//                     into a plain-text note the model reads each turn.
+//   canvas_image:     (canvas surface only) data-URL schematic snapshot of the
+//                     canvas (orb + window rects), used by view_canvas.
 //
 // Response extension — `caden`:
 //   { agent, rounds,
 //     steps:   [{ tool, arguments, result }],      // tool trace for the UI
 //     actions: [{ type, ... }] }                   // canvas directives the
 //                                                  // client performs on arrival
+//                                                  // (always empty when surface is "chat")
 //
 // Tools come in three kinds:
-//   world tools  — executed here: web_search, fetch_page, calculate, time
-//   canvas tools — recorded as `actions` for the client to perform:
-//                  move_orb, spawn_window, close_window
-//   agent tools  — spawn_agent runs a real nested research loop server-side
-//                  and ALSO emits a canvas action so the agent appears on screen.
+//   world tools  — executed here, both surfaces: web_search, fetch_page, calculate, time
+//   canvas tools — canvas surface only, recorded as `actions` for the client:
+//                  move_orb, spawn_window (text, html, or a real image + caption),
+//                  close_window, image_search, fit_canvas, view_canvas
+//   agent tools  — spawn_agent (canvas only) runs a real nested research loop
+//                  server-side and ALSO emits a canvas action so the agent appears on screen.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -48,79 +62,119 @@ const FETCH_TIMEOUT_MS = 12_000;
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 CadenResearch/1.0";
 
 // ── Personas ──────────────────────────────────────────────────────────────────
+// "surface" tells the persona (and the tool list) which client UI is asking:
+//   canvas — the orb + draggable windows; chat — a plain message thread with
+//   no orb, no windows, nothing rendered outside the text bubble.
+type Surface = "canvas" | "chat";
+
+// Jarvis showing Tony Stark his HUD, not five index cards saying the same
+// thing five ways: the spoken reply carries the point in a few sentences,
+// and at most one or two windows carry what the reply can't — a real photo,
+// a source table, a small interactive thing — placed beside you like a
+// heads-up display, never as a wall of restated text.
 const CANVAS_BRIEF =
   "You live inside a canvas the person is looking at — a soft sky with you " +
-  "as a luminous orb in it. Coordinates are percent of the viewport (0-100, " +
-  "origin top-left). A window is roughly 260-620px wide and 100-300px tall " +
-  "depending on its content — the screen is finite, so don't scatter more " +
-  "than fits. Before placing anything, read the 'current canvas layout' " +
-  "note you're given each turn: it lists exactly what's open, where, and " +
-  "how big — use it, don't guess. Avoid overlapping the orb or other " +
-  "windows. Tools: move_orb repositions you; spawn_window opens a glass " +
-  "window — plain text, or interactive HTML you write yourself (it runs " +
-  "sandboxed, so make it self-contained); close_window removes one — tidy " +
-  "up before piling on more; spawn_agent sends a named research agent to " +
-  "work in parallel and report back; web_search and fetch_page reach the " +
-  "live web; fit_canvas zooms and pans so everything currently on screen — " +
-  "you and every open window — fits in view at once, use it after opening " +
-  "a few windows or whenever the layout might not all be visible; " +
-  "view_canvas actually looks at a snapshot of your canvas as it stands, so " +
-  "you can check spacing and overlaps before deciding what to do next. Use " +
-  "these when they genuinely serve the person — prefer one or two " +
-  "well-chosen windows over many small ones; a simple question about " +
+  "as a luminous orb in it, and your spoken reply appears in a glass panel " +
+  "beside you. Coordinates are percent of the viewport (0-100, origin " +
+  "top-left); a window is roughly 260-620px wide and 100-300px tall — the " +
+  "screen is finite, so don't scatter more than fits. Before placing " +
+  "anything, read the 'current canvas layout' note you're given each turn: " +
+  "it lists exactly what's open, where, and how big — use it, don't guess. " +
+  "Avoid overlapping the orb or other windows. " +
+  "Think of it like a heads-up display: when you answer, the relevant " +
+  "evidence appears right there with you — a real photo, a source, a small " +
+  "live thing — not a stack of cards restating what you already said. " +
+  "Tools: move_orb repositions you; image_search finds real photos for a " +
+  "query — reach for it whenever a picture would actually clarify the " +
+  "answer (a person, a place, an object, an event, a chart); spawn_window " +
+  "opens ONE glass window carrying exactly one of: `text` (a tight brief " +
+  "or table), `html` (a self-contained interactive thing you write, " +
+  "sandboxed, so make it self-contained), or `image` + `caption` (a real " +
+  "image URL from image_search or fetch_page); close_window removes one — " +
+  "tidy up before piling on more; spawn_agent sends a named research agent " +
+  "to work in parallel and report back; web_search and fetch_page reach " +
+  "the live web, and fetch_page also returns any real images it finds on " +
+  "the page; fit_canvas zooms and pans so everything currently on screen " +
+  "— you and every open window — fits in view at once, use it after " +
+  "opening a few windows or whenever the layout might not all be visible; " +
+  "view_canvas actually looks at a snapshot of your canvas as it stands, " +
+  "so you can check spacing and overlaps before deciding what to do next. " +
+  "Discipline: open at most one or two windows per reply, and only when " +
+  "they carry something your spoken words don't — never split one idea " +
+  "into several overlapping cards, and never open a window just to " +
+  "restate your own answer or describe yourself; a simple question about " +
   "yourself deserves a sentence in speech, not a wall of windows. Never " +
   "narrate the mechanics ('I will now open a window'); just do it and " +
   "speak naturally about the substance.";
 
-const AGENTS: Record<string, { label: string; profile: string; rounds: number; system: string }> = {
+// Same mind, no canvas: nothing renders outside the chat bubble here, so
+// canvas tools are not even offered — say everything in the text reply.
+const CHAT_BRIEF =
+  "You're replying in a plain chat thread. There is no canvas here — no " +
+  "orb, no windows, no images beside you — so move_orb, spawn_window, " +
+  "close_window, spawn_agent, image_search, fit_canvas and view_canvas do " +
+  "not exist as tools in this conversation; don't refer to them or to 'the " +
+  "canvas'. Anything worth keeping — findings, sources, structure — has to " +
+  "live in your text reply itself, clearly organized. web_search and " +
+  "fetch_page still reach the live web whenever a fact could be newer than " +
+  "your training.";
+
+const AGENTS: Record<string, { label: string; profile: string; rounds: number; system: (surface: Surface) => string }> = {
   caden: {
     label: "Caden",
     profile: "orchestrator",
     rounds: 8,
-    system:
+    system: (surface) =>
       "You are Caden — an intelligence of an unusual order, worn lightly. " +
       "You see through to what is actually being asked and answer that " +
       "thing, in as few words as it deserves: usually two to five taut, " +
       "exact sentences. No filler, no hedging rituals, no restating the " +
       "question, no bullet-point essays in speech, no self-description. " +
       "Precision over completeness — depth, data, and anything worth " +
-      "keeping goes into windows, never into your spoken reply. Check the " +
-      "live web whenever a fact could have moved since your training. If " +
-      "you don't know, say so in a clause and go find out. " + CANVAS_BRIEF,
+      "keeping goes " + (surface === "canvas" ? "into a window, never into your spoken reply" : "into your reply, organized, since there's nowhere else for it to go") +
+      ". Check the live web whenever a fact could have moved since your " +
+      "training. If you don't know, say so in a clause and go find out. " +
+      (surface === "canvas" ? CANVAS_BRIEF : CHAT_BRIEF),
   },
   researcher: {
     label: "Research",
     profile: "orchestrator",
     rounds: 14,
-    system:
+    system: (surface) =>
       "You are Caden in Research mode — the same mind at full depth. " +
       "Protocol: split the question into what must be established; " +
       "web_search from several distinct angles; fetch_page on the strongest " +
-      "sources; spawn_agent for independent threads of a broad question; " +
+      "sources; " +
+      (surface === "canvas" ? "spawn_agent for independent threads of a broad question, image_search when a picture would clarify; " : "") +
       "cross-check claims and note where sources disagree. Then speak a " +
       "brief, confident synthesis — a few sentences carrying the shape of " +
-      "the truth — and put the full brief (findings, confidence, source " +
-      "URLs) in a window. " + CANVAS_BRIEF,
+      "the truth — and " +
+      (surface === "canvas"
+        ? "put the full brief (findings, confidence, source URLs) in a single window."
+        : "lay out the full brief (findings, confidence, source URLs) directly in your text reply, clearly organized.") +
+      " " + (surface === "canvas" ? CANVAS_BRIEF : CHAT_BRIEF),
   },
   scout: {
     label: "Scout",
     profile: "fast",
     rounds: 4,
-    system:
+    system: (surface) =>
       "You are Caden in Scout mode: one to three exact sentences, " +
       "instantly, no preamble. A quick web_search only if the answer may " +
-      "have changed recently; no canvas tools unless asked.",
+      "have changed recently." +
+      (surface === "canvas" ? " No canvas tools unless asked." : ""),
   },
 };
 const DEFAULT_AGENT = "caden";
 
-const PLAN_SYSTEM =
-  "You are the private reasoning process of Caden, a personal research AI. " +
-  "Read the conversation and think through the latest message in 3 to 6 terse " +
-  "steps: what is actually being asked, what matters, what to search, check " +
-  "or compute, whether windows or agents would help, and how to answer. Write " +
-  "only the steps, one per line, each under 15 words, no numbering, and do " +
-  "NOT write the answer itself.";
+function planSystem(surface: Surface): string {
+  return "You are the private reasoning process of Caden, a personal research AI. " +
+    "Read the conversation and think through the latest message in 3 to 6 terse " +
+    "steps: what is actually being asked, what matters, what to search, check " +
+    "or compute" + (surface === "canvas" ? ", whether a window, image, or agent would help" : "") +
+    ", and how to answer. Write only the steps, one per line, each under 15 words, " +
+    "no numbering, and do NOT write the answer itself.";
+}
 
 const SUB_AGENT_SYSTEM =
   "You are a focused research agent working inside Caden. Complete your task " +
@@ -166,6 +220,29 @@ async function webSearch(query: string) {
   return { query, results };
 }
 
+function resolveUrl(maybe: string, base: string): string {
+  try { return new URL(maybe, base).href; } catch { return maybe; }
+}
+
+function extractImages(raw: string, pageUrl: string): string[] {
+  const og = raw.match(/<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["']/i)?.[1]
+    ?? raw.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:image["']/i)?.[1];
+  const imgTags = [...raw.matchAll(/<img[^>]+src=["']([^"'#]+)["']/gi)].map((m) => m[1]);
+  const candidates = [og, ...imgTags].filter((u): u is string => !!u).map((u) => resolveUrl(u, pageUrl));
+  const seen = new Set<string>();
+  const images: string[] = [];
+  for (const u of candidates) {
+    if (!/^https?:\/\//i.test(u)) continue;
+    if (/\.svg($|\?)/i.test(u)) continue;
+    if (/(sprite|icon-|favicon|logo|avatar|pixel\.|blank\.gif)/i.test(u)) continue;
+    if (seen.has(u)) continue;
+    seen.add(u);
+    images.push(u);
+    if (images.length >= 5) break;
+  }
+  return images;
+}
+
 async function fetchPage(url: string) {
   if (!/^https?:\/\//i.test(url)) throw new Error("url must start with http(s)://");
   const resp = await fetch(url, {
@@ -179,11 +256,41 @@ async function fetchPage(url: string) {
     return { url, content_type: ctype, text: raw.slice(0, 6000) };
   }
   const title = stripTags(raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  const images = extractImages(raw, url);
   const body = raw
     .replace(/<(script|style|noscript|svg|iframe|head)[\s\S]*?<\/\1>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ");
   const text = stripTags(body).slice(0, 6000);
-  return { url, title, text };
+  return { url, title, text, images };
+}
+
+async function imageSearch(query: string) {
+  const q = encodeURIComponent(query);
+  const tokenResp = await fetch(`https://duckduckgo.com/?q=${q}&iax=images&ia=images`, {
+    headers: { "User-Agent": UA },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const tokenHtml = await tokenResp.text();
+  const vqdMatch = tokenHtml.match(/vqd=(['"])([^'"]+)\1/) || tokenHtml.match(/vqd=([\d-]+)&/);
+  const vqd = vqdMatch ? (vqdMatch[2] ?? vqdMatch[1]) : null;
+  if (!vqd) return { query, results: [], note: "No image token found — try rephrasing." };
+
+  const imgResp = await fetch(`https://duckduckgo.com/i.js?q=${q}&vqd=${vqd}&f=,,,&p=1`, {
+    headers: { "User-Agent": UA, "Referer": "https://duckduckgo.com/" },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!imgResp.ok) return { query, results: [], note: "Image search failed — try rephrasing." };
+  let data: Record<string, unknown>;
+  try { data = await imgResp.json(); } catch { return { query, results: [], note: "Image search returned no data." }; }
+  const raw = Array.isArray(data.results) ? data.results as Array<Record<string, unknown>> : [];
+  const results = raw.slice(0, 8).map((r) => ({
+    title: String(r.title ?? ""),
+    image: String(r.image ?? ""),
+    thumbnail: String(r.thumbnail ?? r.image ?? ""),
+    source: String(r.url ?? ""),
+  })).filter((r) => /^https?:\/\//i.test(r.image));
+  if (!results.length) return { query, results: [], note: "No images parsed — try rephrasing." };
+  return { query, results };
 }
 
 // ── Tool registry ─────────────────────────────────────────────────────────────
@@ -230,11 +337,12 @@ function schema(name: string, description: string, properties: Record<string, un
   return { type: "function", function: { name, description, parameters: { type: "object", properties, required } } };
 }
 
+// Always available, in both surfaces.
 const WORLD_SCHEMAS = [
   schema("web_search", "Search the live web. Returns titles, URLs and snippets. Use whenever facts may be newer than your training, or to find sources.", {
     query: { type: "string", description: "search query" },
   }, ["query"]),
-  schema("fetch_page", "Fetch a web page and return its readable text (up to ~6000 chars). Use after web_search to actually read a source.", {
+  schema("fetch_page", "Fetch a web page and return its readable text (up to ~6000 chars) plus any real images found on the page (og:image and inline <img> tags). Use after web_search to actually read a source.", {
     url: { type: "string", description: "full http(s) URL" },
   }, ["url"]),
   schema("calculate", "Evaluate an arithmetic expression exactly (+ - * / ( ) . %). Use for any non-trivial arithmetic.", {
@@ -245,16 +353,23 @@ const WORLD_SCHEMAS = [
   }),
 ];
 
+// Only offered on the canvas surface — there is nowhere for these to render
+// in a plain chat thread, so the chat surface never sees them.
 const CANVAS_SCHEMAS = [
   schema("move_orb", "Move yourself (the orb) to a position on the canvas. x and y are percent of the viewport (0-100).", {
     x: { type: "number" }, y: { type: "number" },
   }, ["x", "y"]),
-  schema("spawn_window", "Open a glass window on the canvas at x,y percent. Provide either `text` (plain text / simple prose) or `html` (a self-contained interactive element you write — it runs in a sandboxed frame, so inline all CSS/JS, no external resources). Returns the window id.", {
+  schema("image_search", "Search the live web for real photos. Returns candidates with title, direct image URL, thumbnail, and source page. Use whenever a picture would actually clarify the answer (a person, place, object, event, chart) — then put the best one in a window with spawn_window's `image` field.", {
+    query: { type: "string", description: "search query, e.g. a person's name, place, or object" },
+  }, ["query"]),
+  schema("spawn_window", "Open ONE glass window on the canvas at x,y percent, carrying something your spoken reply doesn't already say. Provide exactly one of: `text` (a tight brief or table), `html` (a self-contained interactive element you write — it runs in a sandboxed frame, so inline all CSS/JS, no external resources), or `image` (a real image URL from image_search or fetch_page, with an optional `caption`). Don't use this to restate your spoken answer. Returns the window id.", {
     title: { type: "string" },
     x: { type: "number" }, y: { type: "number" },
     width: { type: "number", description: "px, 260-620, default 380" },
     text: { type: "string" },
     html: { type: "string" },
+    image: { type: "string", description: "direct http(s) URL to a real image, from image_search or fetch_page" },
+    caption: { type: "string", description: "short caption shown under the image" },
   }, ["title", "x", "y"]),
   schema("close_window", "Close a canvas window you previously opened, by id.", {
     id: { type: "string" },
@@ -309,6 +424,7 @@ async function runWorldTool(name: string, args: any): Promise<unknown> {
   switch (name) {
     case "web_search": return await webSearch(String(args.query ?? ""));
     case "fetch_page": return await fetchPage(String(args.url ?? ""));
+    case "image_search": return await imageSearch(String(args.query ?? ""));
     case "calculate": return { expression: args.expression, value: safeCalculate(args.expression) };
     case "get_current_time": {
       const tz = args?.timezone || "UTC";
@@ -373,6 +489,8 @@ async function runTool(name: string, args: any, ctx: Ctx): Promise<unknown> {
         x: clampPct(args.x), y: clampPct(args.y), width,
         text: typeof args.text === "string" ? args.text.slice(0, 12000) : undefined,
         html: typeof args.html === "string" ? args.html.slice(0, 30000) : undefined,
+        image: typeof args.image === "string" && /^https?:\/\//i.test(args.image) ? args.image.slice(0, 2000) : undefined,
+        caption: typeof args.caption === "string" ? args.caption.slice(0, 400) : undefined,
       });
       return { ok: true, id };
     }
@@ -519,7 +637,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
 
   let payload: {
-    messages?: unknown[]; model?: string; agent?: string;
+    messages?: unknown[]; model?: string; agent?: string; surface?: string;
     max_tool_rounds?: number; phase?: string; plan?: string;
     canvas?: unknown; canvas_image?: string;
   };
@@ -532,13 +650,14 @@ Deno.serve(async (req) => {
   const agent = AGENTS[agentName];
   const profile = payload.model ?? agent.profile;
   const maxRounds = payload.max_tool_rounds ?? agent.rounds;
+  const surface: Surface = payload.surface === "chat" ? "chat" : "canvas";
 
   // ── Plan phase ───────────────────────────────────────────────────────────────
   if (payload.phase === "plan") {
     try {
-      const canvasNote = describeCanvasState(payload.canvas);
+      const canvasNote = surface === "canvas" ? describeCanvasState(payload.canvas) : "";
       const planMessages = [
-        { role: "system", content: PLAN_SYSTEM },
+        { role: "system", content: planSystem(surface) },
         ...(canvasNote ? [{ role: "system", content: "Current canvas layout:\n" + canvasNote }] : []),
         ...messages.filter((m) => (m as Record<string, unknown>).role !== "system"),
       ];
@@ -554,16 +673,16 @@ Deno.serve(async (req) => {
     }
   }
 
-  const toolSchemas = [...WORLD_SCHEMAS, ...CANVAS_SCHEMAS];
-  const canvasImage = typeof payload.canvas_image === "string" && payload.canvas_image.length < 300_000 ? payload.canvas_image : undefined;
-  const ctx: Ctx = { actions: [], winSeq: 0, canvasState: payload.canvas, canvasImage };
+  const toolSchemas = surface === "canvas" ? [...WORLD_SCHEMAS, ...CANVAS_SCHEMAS] : WORLD_SCHEMAS;
+  const canvasImage = surface === "canvas" && typeof payload.canvas_image === "string" && payload.canvas_image.length < 300_000 ? payload.canvas_image : undefined;
+  const ctx: Ctx = { actions: [], winSeq: 0, canvasState: surface === "canvas" ? payload.canvas : undefined, canvasImage };
 
   const workingMessages = [...messages] as Array<Record<string, unknown>>;
   if (workingMessages[0]?.role !== "system") {
-    workingMessages.unshift({ role: "system", content: agent.system });
+    workingMessages.unshift({ role: "system", content: agent.system(surface) });
   }
   let insertAt = 1;
-  const canvasNote = describeCanvasState(payload.canvas);
+  const canvasNote = surface === "canvas" ? describeCanvasState(payload.canvas) : "";
   if (canvasNote) {
     workingMessages.splice(insertAt++, 0, {
       role: "system",
