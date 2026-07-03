@@ -225,6 +225,94 @@
   .icon-toggle.off { color: var(--faint); }
   .icon-toggle.off .wave { display: none; }
 
+  /* ── Options modal ───────────────────────────────────────────────────────── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(30, 38, 60, 0.28);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t2) var(--ease-out);
+  }
+  .modal-overlay.visible { opacity: 1; pointer-events: auto; }
+
+  .modal-panel {
+    width: min(440px, calc(100vw - 32px));
+    border-radius: 20px;
+    transform: translateY(10px) scale(0.97);
+    opacity: 0;
+    transition: transform var(--t2) var(--ease-spring), opacity var(--t2) var(--ease-out);
+  }
+  .modal-overlay.visible .modal-panel { transform: none; opacity: 1; }
+
+  .modal-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 10px 14px 20px;
+    border-bottom: 1px solid rgba(90, 105, 145, 0.16);
+  }
+  .modal-title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .modal-body { padding: 18px 22px 22px; }
+
+  .donate-title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .donate-copy {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--dim);
+    margin: 0 0 14px;
+  }
+  .donate-row { display: flex; gap: 8px; }
+  .donate-input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    background: rgba(255,255,255,0.5);
+    border: 1px solid rgba(90, 105, 145, 0.28);
+    border-radius: 11px;
+    padding: 9px 12px;
+  }
+  .donate-input::placeholder { color: var(--faint); }
+  .donate-submit {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent);
+    border-radius: 11px;
+    padding: 9px 16px;
+    white-space: nowrap;
+    transition: opacity var(--t1);
+  }
+  .donate-submit:hover { opacity: 0.88; }
+  .donate-submit:disabled { opacity: 0.55; cursor: default; }
+  .donate-status {
+    min-height: 16px;
+    margin-top: 10px;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .donate-status.ok { color: #2E8B57; }
+  .donate-status.err { color: var(--warm); }
+
   /* ── Stage / canvas ──────────────────────────────────────────────────────── */
   .stage {
     position: fixed;
@@ -833,8 +921,37 @@
       </svg>
     </button>
     <button class="ghost-btn" id="newChatBtn" title="Start fresh">New</button>
+    <button class="icon-toggle" id="optionsBtn" title="Options" aria-label="Options" aria-haspopup="dialog">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3.2"/>
+        <path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2.05 2.05 0 1 1-2.9 2.9l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56v.17a2.05 2.05 0 1 1-4.1 0v-.09a1.7 1.7 0 0 0-1.1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2.05 2.05 0 1 1-2.9-2.9l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H4.6a2.05 2.05 0 1 1 0-4.1h.09a1.7 1.7 0 0 0 1.56-1.1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2.05 2.05 0 1 1 2.9-2.9l.06.06a1.7 1.7 0 0 0 1.87.34H10.9a1.7 1.7 0 0 0 1.03-1.56v-.17a2.05 2.05 0 1 1 4.1 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2.05 2.05 0 1 1 2.9 2.9l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.56 1.03h.17a2.05 2.05 0 1 1 0 4.1h-.09a1.7 1.7 0 0 0-1.56 1.03Z"/>
+      </svg>
+    </button>
   </div>
 </header>
+
+<!-- Options — donate a Groq key, and anything else non-conversational -->
+<div class="modal-overlay" id="optionsOverlay" role="presentation">
+  <div class="modal-panel glass" id="optionsPanel" role="dialog" aria-modal="true" aria-labelledby="optionsTitle">
+    <div class="modal-bar">
+      <div class="modal-title" id="optionsTitle">Options</div>
+      <button class="cwin-close" id="optionsClose" aria-label="Close options">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="donate-section">
+        <div class="donate-title">Donate a Groq key</div>
+        <p class="donate-copy">Caden runs on a shared pool of free-tier Groq keys. If you have one to spare, add it here — it helps everyone get faster, less-interrupted answers. Verified before it's added; never shown again after.</p>
+        <div class="donate-row">
+          <input type="password" id="donateInput" class="donate-input" placeholder="gsk_..." autocomplete="off" spellcheck="false">
+          <button class="donate-submit" id="donateSubmit">Donate</button>
+        </div>
+        <div class="donate-status" id="donateStatus"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Canvas -->
 <main class="stage" id="stage">
@@ -952,6 +1069,7 @@
   // lives server-side as a function secret.
   const API = {
     endpoint: 'https://lrjiopczasvcrhglweth.supabase.co/functions/v1/chat',
+    donateEndpoint: 'https://lrjiopczasvcrhglweth.supabase.co/functions/v1/donate-key',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxyamlvcGN6YXN2Y3JoZ2x3ZXRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MTc0NzAsImV4cCI6MjA5ODQ5MzQ3MH0.D_d-1AvzZQNSnC4tlEEy1dcgAyGEZ2-SxcHwV94nOs4',
   };
 
@@ -973,6 +1091,8 @@
   const modeCanvasBtn = $('modeCanvasBtn'), modeChatBtn = $('modeChatBtn');
   const agentSelect = $('agentSelect'), newChatBtn = $('newChatBtn');
   const soundBtn = $('soundBtn'), telemetry = $('telemetry');
+  const optionsBtn = $('optionsBtn'), optionsOverlay = $('optionsOverlay'), optionsClose = $('optionsClose');
+  const donateInput = $('donateInput'), donateSubmit = $('donateSubmit'), donateStatus = $('donateStatus');
 
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1074,6 +1194,66 @@
   const armAudio = () => { if (Sound.enabled) { Sound.ensure(); Sound.ambientStart(); } };
   window.addEventListener('pointerdown', armAudio, { once: true });
   window.addEventListener('keydown', armAudio, { once: true });
+
+  // ── Options modal — donate a Groq key ───────────────────────────────────────
+  function openOptions() {
+    optionsOverlay.classList.add('visible');
+    donateStatus.textContent = '';
+    donateStatus.className = 'donate-status';
+    setTimeout(() => donateInput.focus(), 50);
+  }
+  function closeOptions() {
+    optionsOverlay.classList.remove('visible');
+  }
+  optionsBtn.addEventListener('click', openOptions);
+  optionsClose.addEventListener('click', closeOptions);
+  optionsOverlay.addEventListener('click', (e) => { if (e.target === optionsOverlay) closeOptions(); });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && optionsOverlay.classList.contains('visible')) closeOptions();
+  });
+
+  let donateInFlight = false;
+  async function donateKey() {
+    const apiKey = donateInput.value.trim();
+    if (donateInFlight) return;
+    if (!apiKey) {
+      donateStatus.textContent = 'Paste a Groq API key first.';
+      donateStatus.className = 'donate-status err';
+      return;
+    }
+    donateInFlight = true;
+    donateSubmit.disabled = true;
+    donateStatus.textContent = 'Verifying…';
+    donateStatus.className = 'donate-status';
+    try {
+      const resp = await fetch(API.donateEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${API.anonKey}`,
+          'apikey': API.anonKey,
+        },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data.ok) {
+        donateStatus.textContent = data.message || 'Added — thank you!';
+        donateStatus.className = 'donate-status ok';
+        donateInput.value = '';
+      } else {
+        donateStatus.textContent = data.error || 'Something went wrong — try again.';
+        donateStatus.className = 'donate-status err';
+      }
+    } catch {
+      donateStatus.textContent = "Couldn't reach the server — try again.";
+      donateStatus.className = 'donate-status err';
+    } finally {
+      donateInFlight = false;
+      donateSubmit.disabled = false;
+    }
+  }
+  donateSubmit.addEventListener('click', donateKey);
+  donateInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') donateKey(); });
 
   // ── Thinking cluster geometry ───────────────────────────────────────────────
   (function buildThinkCluster() {
