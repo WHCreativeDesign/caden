@@ -105,23 +105,59 @@ no notes yet, so the greeting stays honest even if a session is abandoned
 before a name is given. This is what makes the relational tone above
 actually true rather than faked per-session.
 
+## Accuracy discipline
+
+A `web_search` snippet is a lead, not a fact — this bit Caden for real once:
+a "latest Meta glasses" question got answered straight from a stale search
+snippet and missed newer models a human would've found by actually opening
+the product page. Every persona's prompt now carries `ACCURACY_BRIEF`
+(`agent.ts`): for anything time-sensitive or specific (current products,
+prices, availability, "latest"/"newest" anything), open the strongest 1–2
+sources with `fetch_page` or `browser_open` and read what they actually say
+before asserting it, prefer primary sources over aggregator blogs, say so if
+sources disagree, and always cite the URL(s) actually read as plain text in
+the reply — the frontend auto-linkifies any `http(s)://` URL in a message
+body, so a cited source becomes a clickable link for free. `dispatch_agent`
+(below) exists specifically to do this verification legwork with its own
+browser when a question needs real digging. Keep this discipline in sync
+across `caden`/`researcher`/`scout` if you touch the personas — it's the
+main defense against confidently-wrong answers, not a one-off patch.
+
 ## Tools
 
 - **`web_search` / `fetch_page` / `calculate` / `get_current_time`** —
   ported near-verbatim from the retired Supabase function; the
   DuckDuckGo-scrape approach and page-text extraction already worked.
 - **`run_shell`** — full shell access, audited. See Governance above.
-- **`browser_open` / `browser_click` / `browser_type` / `browser_read` /
-  `browser_screenshot` / `browser_close`** — one long-lived Playwright
-  Chromium instance. `BROWSER_MODE` env (`auto` | `local` | `stream`):
-  `local` launches headed on the Pi's attached display (needs `DISPLAY` set,
-  i.e. a desktop session); `stream` launches true headless (no X server
-  needed at all) and pushes JPEG frames over `/ws/browser` to the web UI so
-  it's watchable from any device on the LAN; `auto` picks based on whether
-  `DISPLAY` is set.
-- **`dispatch_agent`** — a bounded (5-round) sub-agent with only the web
-  tools, for parallel research threads. Returns findings as text for the
-  parent to fold into its reply — no canvas to render it in anymore.
+- **`browser_open` / `browser_click` / `browser_type` / `browser_scroll` /
+  `browser_drag` / `browser_read` / `browser_screenshot` / `browser_close`**
+  — one long-lived Playwright Chromium instance. `BROWSER_MODE` env (`auto`
+  | `local` | `stream`): `local` launches headed on the Pi's attached
+  display (needs `DISPLAY` set, i.e. a desktop session); `stream` launches
+  true headless (no X server needed at all); `auto` picks based on whether
+  `DISPLAY` is set. **Live view streams to the web UI's Browser tab
+  regardless of mode** — a headed page screenshots just as well as a
+  headless one, so what the browser is doing is watchable in real time
+  whether or not there's a monitor on the Pi. The screenshot interval
+  defaults to `BROWSER_STREAM_INTERVAL_MS` (700ms) and is live-adjustable
+  via `POST /api/browser/interval` (the Browser tab's dropdown does this) —
+  `startStreaming` in `browser.ts` uses a self-rescheduling `setTimeout`
+  rather than `setInterval` specifically so a live interval change takes
+  effect on the next tick, not just after a restart. Frames only get
+  captured while someone's actually watching (`addStreamViewer`/
+  `removeStreamViewer`, wired to `/ws/browser` connect/disconnect).
+  `browser_scroll`'s up/down directions move the mouse into the viewport
+  before calling `page.mouse.wheel()` — without that, wheel events land at
+  the default (0,0) mouse position and silently do nothing; this was caught
+  by an actual live Playwright test, not assumed.
+- **`dispatch_agent`** — a bounded (8-round) sub-agent with the full web
+  *and* browser toolset, so it can verify a claim on the actual page rather
+  than trusting a search snippet. Returns findings as text for the parent to
+  fold into its reply — no canvas to render it in anymore. Shares the same
+  single global browser instance as the parent agent (intentional — this is
+  a 4GB Pi, running multiple Chromium instances isn't something to build
+  toward); in practice this is safe because tool calls execute sequentially,
+  never concurrently, within a turn.
 - **`remember`** — persists the user's name and durable facts across
   conversations. See Memory above.
 

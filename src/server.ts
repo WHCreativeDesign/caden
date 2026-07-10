@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { AgentName, agentLabel, planThinking, runAgentTurn } from "./agent.js";
 import { providerStatus } from "./providers.js";
 import { auditEvents } from "./tools/shell.js";
-import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer } from "./tools/browser.js";
+import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval } from "./tools/browser.js";
 import { updateStatus } from "./update.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +26,12 @@ export function startServer() {
       browser: browserStatus(),
       providers: providerStatus(),
     });
+  });
+
+  app.post("/api/browser/interval", (req, res) => {
+    const ms = Number(req.body?.interval_ms);
+    if (!Number.isFinite(ms)) return res.status(400).json({ error: "interval_ms must be a number" });
+    res.json({ interval_ms: setStreamInterval(ms) });
   });
 
   app.post("/api/chat", async (req, res) => {
