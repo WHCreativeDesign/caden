@@ -45,20 +45,28 @@ access, audited."
 
 ```
 src/
-  index.ts             — entrypoint: loads .env (dev only), starts the server + update watcher
-  agent.ts              — the tool-calling agent loop, personas (caden/researcher/scout)
-  providers.ts           — Groq/Gemini key cycling (in-memory, single-user — no DB)
-  server.ts               — Express + ws: /api/chat, /api/status, /ws/log, /ws/browser
-  update.ts                — self-update watcher (git fetch/pull → rebuild → exit; systemd relaunches)
+  index.ts             — daemon entrypoint: loads .env (dev only), starts the server + update watcher
+  cli.ts                — caden-chat: a terminal chat client for a running Caden (talks to /api/chat)
+  env.ts                 — shared .env loader used by both index.ts and cli.ts
+  agent.ts                — the tool-calling agent loop, personas (caden/researcher/scout)
+  providers.ts              — Groq/Gemini key cycling (in-memory, single-user — no DB)
+  server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/browser
+  update.ts                   — self-update watcher (git fetch/pull → rebuild → exit; systemd relaunches)
   tools/
-    web.ts                  — web_search, fetch_page, calculate, get_current_time
-    shell.ts                 — run_shell + the audit log + the hardcoded deny list
-    browser.ts                — Playwright wrapper, local-display / streamed modes
-    agentDispatch.ts           — dispatch_agent, a bounded parallel research sub-agent
+    web.ts                      — web_search, fetch_page, calculate, get_current_time
+    shell.ts                     — run_shell + the audit log + the hardcoded deny list
+    browser.ts                    — Playwright wrapper, local-display / streamed modes
+    agentDispatch.ts               — dispatch_agent, a bounded parallel research sub-agent
 public/
-  index.html               — the whole frontend: one self-contained file, no build step, no CDN deps
+  index.html               — the whole web frontend: one self-contained file, no build step, no CDN deps
+bin/caden-chat             — thin wrapper exec'ing dist/cli.js; install.sh symlinks it to /usr/local/bin
 systemd/caden.service      — the service unit (Restart=always, WantedBy=multi-user.target)
-scripts/install.sh          — one-command Pi setup: deps, Playwright, systemd, build
+scripts/
+  bootstrap.sh              — the single curl-pipeable installer: clones/updates the repo, then hands
+                               off to install.sh (its own `read` prompts go via /dev/tty since the
+                               curl|bash pipe consumes stdin — see install.sh's key-entry section)
+  install.sh                 — the real installer: Node.js if missing, deps, Playwright, interactive
+                                key entry, build, systemd install + start. Safe to re-run.
 ```
 
 ## Agent loop

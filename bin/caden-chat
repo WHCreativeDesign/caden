@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Thin wrapper so `caden-chat` works from anywhere once
+# scripts/install.sh symlinks this into /usr/local/bin.
+set -euo pipefail
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+exec node "$DIR/dist/cli.js" "$@"

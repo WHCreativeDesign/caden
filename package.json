@@ -7,10 +7,14 @@
   "engines": {
     "node": ">=20"
   },
+  "bin": {
+    "caden-chat": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "chat": "node dist/cli.js"
   },
   "dependencies": {
     "express": "^4.19.2",
