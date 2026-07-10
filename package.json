@@ -1,0 +1,26 @@
+{
+  "name": "caden",
+  "version": "1.0.0",
+  "description": "Caden — a personal agent daemon with real shell and browser control, running on a Raspberry Pi.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "playwright": "^1.47.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.12",
+    "typescript": "^5.5.4"
+  }
+}

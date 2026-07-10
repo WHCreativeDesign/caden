@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Caden</title>
+<style>
+  :root {
+    --bg-0: #05010f;
+    --bg-1: #0b0420;
+    --bg-2: #120a30;
+    --cyan: #00fff2;
+    --magenta: #ff2bd6;
+    --violet: #8b5cf6;
+    --ink: #e8ecff;
+    --dim: #9aa3c9;
+    --faint: rgba(160, 170, 220, 0.45);
+    --ok: #39ffb0;
+    --err: #ff4d6d;
+    --panel-bg: linear-gradient(160deg, rgba(24, 12, 48, 0.82), rgba(10, 5, 24, 0.78));
+    --panel-border: rgba(0, 255, 242, 0.35);
+    --panel-border-dim: rgba(139, 92, 246, 0.3);
+    --glow-cyan: 0 0 1px rgba(0, 255, 242, 0.9), 0 0 14px rgba(0, 255, 242, 0.35);
+    --glow-magenta: 0 0 1px rgba(255, 43, 214, 0.9), 0 0 14px rgba(255, 43, 214, 0.35);
+    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --t1: 0.15s; --t2: 0.3s;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--mono);
+    color: var(--ink);
+    background:
+      radial-gradient(ellipse 120% 60% at 50% -10%, rgba(139, 92, 246, 0.25), transparent 60%),
+      radial-gradient(ellipse 100% 50% at 50% 110%, rgba(0, 255, 242, 0.12), transparent 60%),
+      linear-gradient(180deg, var(--bg-1), var(--bg-0) 60%);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* CRT scanlines + vignette, purely decorative */
+  .scan {
+    position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background:
+      repeating-linear-gradient(180deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse 90% 90% at 50% 50%, transparent 55%, rgba(0,0,0,0.45) 100%);
+    mix-blend-mode: overlay;
+  }
+
+  ::selection { background: rgba(0, 255, 242, 0.28); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(0, 255, 242, 0.25); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+  button:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 1px solid var(--cyan); outline-offset: 2px;
+  }
+
+  .glass {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border-dim);
+    backdrop-filter: blur(18px) saturate(1.3);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  }
+
+  /* ── Layout ─────────────────────────────────────────────────────────── */
+  .app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; padding: 12px 18px; z-index: 20;
+    border-bottom: 1px solid var(--panel-border-dim);
+  }
+  .wordmark {
+    font-size: 17px; font-weight: 700; letter-spacing: 0.28em;
+    color: var(--cyan); text-shadow: var(--glow-cyan);
+  }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+  select.agent-select {
+    appearance: none; -webkit-appearance: none;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink); background: rgba(139, 92, 246, 0.12);
+    border: 1px solid var(--panel-border-dim); border-radius: 3px;
+    padding: 6px 24px 6px 10px; cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%2300fff2' stroke-width='1.4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  select.agent-select option { background: #0b0420; color: var(--ink); }
+
+  .pill-btn {
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--dim); border: 1px solid var(--panel-border-dim); border-radius: 3px;
+    padding: 6px 12px; transition: color var(--t1), border-color var(--t1), box-shadow var(--t1);
+  }
+  .pill-btn:hover { color: var(--cyan); border-color: var(--panel-border); box-shadow: var(--glow-cyan); }
+  .pill-btn.on { color: var(--cyan); border-color: var(--panel-border); box-shadow: var(--glow-cyan); }
+
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--faint);
+    box-shadow: none; transition: background var(--t2), box-shadow var(--t2);
+  }
+  .status-dot.up { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .status-dot.down { background: var(--err); box-shadow: 0 0 6px var(--err); }
+
+  /* ── Chat column ────────────────────────────────────────────────────── */
+  .main { flex: 1; display: flex; min-height: 0; }
+  .chat-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .chat-scroll { flex: 1; overflow-y: auto; padding: 28px 18px 14px; }
+  .chat-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+
+  .chat-empty {
+    margin: 18vh auto 0; text-align: center; color: var(--faint);
+    font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .chat-empty .big {
+    display: block; font-size: 22px; letter-spacing: 0.3em; color: var(--violet);
+    text-shadow: 0 0 16px rgba(139, 92, 246, 0.6); margin-bottom: 10px;
+  }
+
+  .turn { display: flex; }
+  .turn-user { justify-content: flex-end; }
+  .msg-user {
+    max-width: 78%; padding: 10px 14px; border-radius: 3px;
+    background: rgba(0, 255, 242, 0.08); border: 1px solid rgba(0, 255, 242, 0.3);
+    color: var(--ink); font-size: 13.5px; line-height: 1.6; white-space: pre-wrap;
+  }
+  .msg-assistant { max-width: 88%; }
+  .msg-assistant.error .msg-card { border-color: rgba(255, 77, 109, 0.5); }
+
+  .msg-eyebrow {
+    font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--magenta); text-shadow: var(--glow-magenta); margin-bottom: 8px;
+  }
+  .msg-card { padding: 14px 16px 12px; border-radius: 3px; }
+  .msg-body { font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: break-word; }
+  .msg-body a { color: var(--cyan); }
+  .msg-meta {
+    margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(139, 92, 246, 0.18);
+    font-size: 10.5px; letter-spacing: 0.05em; color: var(--faint);
+  }
+
+  .caret { display: inline-block; width: 7px; height: 14px; margin-left: 1px; background: var(--cyan); box-shadow: var(--glow-cyan); vertical-align: -2px; animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: var(--glow-cyan); animation: tpulse 1.1s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: 0.15s; } .typing i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes tpulse { 0%, 60%, 100% { opacity: 0.25; transform: scale(0.8); } 30% { opacity: 1; transform: scale(1.15); } }
+
+  /* Thinking / tool-trace capsule, styled as a system log excerpt */
+  .think-capsule { margin-bottom: 8px; }
+  .think-capsule summary {
+    list-style: none; cursor: pointer; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); display: flex; align-items: center; gap: 6px; padding: 2px 0;
+  }
+  .think-capsule summary::before { content: "▸"; color: var(--violet); transition: transform var(--t1); }
+  .think-capsule[open] summary::before { transform: rotate(90deg); }
+  .think-capsule summary::-webkit-details-marker { display: none; }
+  .think-capsule.live summary { color: var(--cyan); }
+  .think-body {
+    margin-top: 6px; padding: 8px 10px; border-left: 2px solid var(--panel-border-dim);
+    font-size: 11.5px; line-height: 1.7; color: var(--dim);
+  }
+  .think-line { white-space: pre-wrap; }
+  .think-line.tool b { color: var(--magenta); font-weight: 600; }
+  .think-line.tool span { color: var(--faint); }
+
+  /* ── Input bar ──────────────────────────────────────────────────────── */
+  .input-bar { padding: 12px 18px 18px; }
+  .input-inner {
+    max-width: 760px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px;
+    border-radius: 4px; padding: 8px 10px;
+  }
+  .input-field {
+    flex: 1; resize: none; background: none; border: none; color: var(--ink);
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.5; max-height: 140px; padding: 6px 4px;
+  }
+  .input-field::placeholder { color: var(--faint); }
+  .send-btn {
+    width: 34px; height: 34px; flex: 0 0 auto; border-radius: 3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--cyan); border: 1px solid var(--panel-border-dim);
+    transition: box-shadow var(--t1), border-color var(--t1);
+  }
+  .send-btn:hover { border-color: var(--panel-border); box-shadow: var(--glow-cyan); }
+  .send-btn:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
+
+  /* ── Side panel (SYSTEM LOG / BROWSER) ─────────────────────────────── */
+  .side-panel {
+    width: 340px; flex: 0 0 auto; display: flex; flex-direction: column;
+    border-left: 1px solid var(--panel-border-dim);
+    transform: translateX(100%); transition: transform var(--t2) var(--ease);
+  }
+  .side-panel.open { transform: none; }
+  @media (max-width: 860px) {
+    .side-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 30; }
+  }
+
+  .side-tabs { display: flex; border-bottom: 1px solid var(--panel-border-dim); }
+  .side-tabs button {
+    flex: 1; padding: 10px 0; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--faint); border-bottom: 2px solid transparent;
+  }
+  .side-tabs button.on { color: var(--cyan); border-bottom-color: var(--cyan); text-shadow: var(--glow-cyan); }
+
+  .side-body { flex: 1; overflow-y: auto; padding: 10px 12px; display: none; }
+  .side-body.on { display: block; }
+
+  .log-line {
+    font-size: 10.5px; line-height: 1.6; padding: 6px 0; border-bottom: 1px dashed rgba(139, 92, 246, 0.15);
+    color: var(--dim); white-space: pre-wrap; word-break: break-word;
+  }
+  .log-line .cmd { color: var(--ink); }
+  .log-line.ok .tag { color: var(--ok); }
+  .log-line.error .tag { color: var(--err); }
+  .log-line.running .tag { color: var(--cyan); animation: tpulse 1.1s ease-in-out infinite; }
+  .log-line .tag { letter-spacing: 0.08em; text-transform: uppercase; font-size: 9.5px; margin-right: 6px; }
+  .log-empty { color: var(--faint); font-size: 11px; padding: 20px 4px; text-align: center; }
+
+  .browser-view { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .browser-view img { width: 100%; border: 1px solid var(--panel-border-dim); border-radius: 3px; }
+  .browser-note { color: var(--faint); font-size: 11px; text-align: center; padding: 30px 10px; line-height: 1.6; }
+
+  .status-strip {
+    padding: 10px 12px; border-top: 1px solid var(--panel-border-dim);
+    font-size: 10px; letter-spacing: 0.04em; color: var(--faint); display: grid; gap: 4px;
+  }
+  .status-strip b { color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="scan" aria-hidden="true"></div>
+
+<div class="app">
+  <header class="topbar glass">
+    <div class="wordmark">CADEN</div>
+    <div class="topbar-right">
+      <select class="agent-select" id="agentSelect" aria-label="Persona">
+        <option value="caden">Caden</option>
+        <option value="researcher">Research</option>
+        <option value="scout">Scout</option>
+      </select>
+      <button class="pill-btn" id="systemBtn" aria-pressed="false">System</button>
+      <button class="pill-btn" id="newBtn">New</button>
+      <span class="status-dot" id="statusDot" title="Connection"></span>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="chat-col">
+      <div class="chat-scroll" id="chatScroll">
+        <div class="chat-inner" id="chatInner">
+          <div class="chat-empty" id="chatEmpty"><span class="big">CADEN</span>online · awaiting input</div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <div class="input-inner glass">
+          <textarea class="input-field" id="inputField" placeholder="Talk to Caden…" rows="1"></textarea>
+          <button class="send-btn" id="sendBtn" title="Send" aria-label="Send">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="side-panel glass" id="sidePanel">
+      <div class="side-tabs">
+        <button id="tabLog" class="on">System Log</button>
+        <button id="tabBrowser">Browser</button>
+      </div>
+      <div class="side-body on" id="logBody">
+        <div class="log-empty" id="logEmpty">No shell activity yet.</div>
+      </div>
+      <div class="side-body" id="browserBody">
+        <div class="browser-view" id="browserView">
+          <div class="browser-note">Opening the Browser tab connects the live view. Nothing streams until then.</div>
+        </div>
+      </div>
+      <div class="status-strip" id="statusStrip">
+        <div><b>SHA</b> <span id="statSha">—</span></div>
+        <div><b>UPTIME</b> <span id="statUptime">—</span></div>
+        <div><b>BROWSER</b> <span id="statBrowser">—</span></div>
+        <div><b>GROQ KEYS</b> <span id="statGroq">—</span> · <b>GEMINI</b> <span id="statGemini">—</span></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const chatScroll = $('chatScroll'), chatInner = $('chatInner'), chatEmpty = $('chatEmpty');
+  const agentSelect = $('agentSelect'), newBtn = $('newBtn'), systemBtn = $('systemBtn'), statusDot = $('statusDot');
+  const inputField = $('inputField'), sendBtn = $('sendBtn');
+  const sidePanel = $('sidePanel'), tabLog = $('tabLog'), tabBrowser = $('tabBrowser');
+  const logBody = $('logBody'), logEmpty = $('logEmpty'), browserBody = $('browserBody'), browserView = $('browserView');
+  const statSha = $('statSha'), statUptime = $('statUptime'), statBrowser = $('statBrowser'), statGroq = $('statGroq'), statGemini = $('statGemini');
+
+  const STORAGE_KEY = 'caden.session.v1';
+  const AGENT_LABELS = { caden: 'Caden', researcher: 'Caden — Research', scout: 'Caden — Scout' };
+
+  let agent = 'caden';
+  let history = [];
+  let log = [];
+  let inFlight = false;
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ agent, history, log })); } catch {}
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (AGENT_LABELS[s.agent]) agent = s.agent;
+      if (Array.isArray(s.history)) history = s.history;
+      if (Array.isArray(s.log)) log = s.log;
+    } catch {}
+  }
+
+  function scrollChat() { chatScroll.scrollTop = chatScroll.scrollHeight; }
+
+  function buildCapsule({ live } = {}) {
+    const details = document.createElement('details');
+    details.className = 'think-capsule' + (live ? ' live' : '');
+    if (live) details.open = true;
+    const summary = document.createElement('summary');
+    summary.textContent = live ? 'thinking' : 'thought process';
+    const body = document.createElement('div');
+    body.className = 'think-body';
+    details.append(summary, body);
+    return {
+      el: details,
+      addLine(text) {
+        const l = document.createElement('div'); l.className = 'think-line'; l.textContent = text;
+        body.appendChild(l); return l;
+      },
+      addToolStep(step) {
+        const l = document.createElement('div'); l.className = 'think-line tool';
+        const name = document.createElement('b'); name.textContent = step.tool;
+        const args = document.createElement('span'); args.textContent = ' ' + step.arguments + ' ';
+        l.append(name, args, document.createTextNode('→ ' + step.result));
+        body.appendChild(l); return l;
+      },
+      finish(count) {
+        details.classList.remove('live'); details.open = false;
+        summary.textContent = 'thought · ' + count + ' step' + (count === 1 ? '' : 's');
+      },
+    };
+  }
+
+  const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/g;
+  function renderRich(el, text) {
+    el.textContent = '';
+    const parts = String(text ?? '').split(URL_RE);
+    for (const part of parts) {
+      if (/^https?:\/\//.test(part)) {
+        const a = document.createElement('a'); a.href = part; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.textContent = part.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60);
+        el.appendChild(a);
+      } else if (part) {
+        el.appendChild(document.createTextNode(part));
+      }
+    }
+  }
+
+  function typewriter(el, text) {
+    return new Promise((resolve) => {
+      el.textContent = '';
+      if (!text) { resolve(); return; }
+      const tokens = text.match(/\S+\s*/g) || [text];
+      const per = Math.max(1, Math.ceil(tokens.length / 55));
+      const caret = document.createElement('span'); caret.className = 'caret'; el.appendChild(caret);
+      let i = 0;
+      const step = () => {
+        if (i >= tokens.length) { caret.remove(); renderRich(el, text); resolve(); return; }
+        let chunk = '';
+        for (let k = 0; k < per && i < tokens.length; k++, i++) chunk += tokens[i];
+        el.insertBefore(document.createTextNode(chunk), caret);
+        scrollChat();
+        setTimeout(() => requestAnimationFrame(step), 14 + Math.random() * 20);
+      };
+      step();
+    });
+  }
+
+  function addUserTurn(text) {
+    chatEmpty.style.display = 'none';
+    const turn = document.createElement('div'); turn.className = 'turn turn-user';
+    const bubble = document.createElement('div'); bubble.className = 'msg-user'; bubble.textContent = text;
+    turn.appendChild(bubble); chatInner.appendChild(turn); scrollChat();
+  }
+
+  function addAssistantTurn({ text, thinking, steps, meta, err }) {
+    chatEmpty.style.display = 'none';
+    const turn = document.createElement('div'); turn.className = 'turn';
+    const wrap = document.createElement('div'); wrap.className = 'msg-assistant' + (err ? ' error' : '');
+    let capsule = null;
+    if ((thinking && thinking.length) || (steps && steps.length)) {
+      capsule = buildCapsule({ live: false });
+      (thinking || []).forEach((l) => capsule.addLine(l));
+      (steps || []).forEach((s) => capsule.addToolStep(s));
+      capsule.finish((thinking?.length || 0) + (steps?.length || 0));
+      wrap.appendChild(capsule.el);
+    }
+    const card = document.createElement('div'); card.className = 'msg-card glass';
+    const eyebrow = document.createElement('div'); eyebrow.className = 'msg-eyebrow';
+    eyebrow.textContent = err ? 'CADEN — OFFLINE' : (AGENT_LABELS[meta?.agent] || 'Caden').toUpperCase();
+    const bodyEl = document.createElement('div'); bodyEl.className = 'msg-body'; bodyEl.textContent = text || '';
+    const metaEl = document.createElement('div'); metaEl.className = 'msg-meta'; metaEl.textContent = meta?.line || '';
+    card.append(eyebrow, bodyEl, metaEl);
+    wrap.appendChild(card); turn.appendChild(wrap); chatInner.appendChild(turn); scrollChat();
+    return { turn, wrap, card, bodyEl, metaEl, capsule };
+  }
+
+  function renderLog() {
+    [...chatInner.querySelectorAll('.turn')].forEach((el) => el.remove());
+    chatEmpty.style.display = log.length ? 'none' : '';
+    for (const entry of log) {
+      if (entry.role === 'user') addUserTurn(entry.text);
+      else addAssistantTurn(entry);
+    }
+  }
+
+  function showTyping(el) {
+    el.innerHTML = '';
+    const t = document.createElement('span'); t.className = 'typing'; t.innerHTML = '<i></i><i></i><i></i>';
+    el.appendChild(t);
+  }
+
+  async function ask(text) {
+    if (inFlight) return;
+    const prompt = text.trim();
+    if (!prompt) return;
+    inFlight = true;
+    sendBtn.disabled = true;
+    const t0 = performance.now();
+    history.push({ role: 'user', content: prompt });
+    log.push({ role: 'user', text: prompt });
+    addUserTurn(prompt);
+    save();
+
+    const liveTurn = addAssistantTurn({ text: '', thinking: [], steps: [], meta: { agent } });
+    const liveCapsule = buildCapsule({ live: true });
+    liveTurn.wrap.prepend(liveCapsule.el);
+    showTyping(liveTurn.bodyEl);
+
+    try {
+      const resp = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent, messages: history }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Request failed.');
+
+      const thinking = data.thinking || [];
+      const steps = data.steps || [];
+      thinking.forEach((l) => liveCapsule.addLine(l));
+      steps.forEach((s) => liveCapsule.addToolStep(s));
+      const stepCount = thinking.length + steps.length;
+      if (stepCount) liveCapsule.finish(stepCount); else liveCapsule.el.remove();
+
+      const reply = data.reply || '(no reply)';
+      history.push({ role: 'assistant', content: reply });
+      const seconds = ((performance.now() - t0) / 1000).toFixed(1);
+      const metaLine = new Date().toLocaleTimeString('en-GB', { hour12: false }) + ' · ' + seconds + 's' +
+        (steps.length ? ' · ' + steps.length + ' tool call' + (steps.length === 1 ? '' : 's') : '');
+      const meta = { agent, line: metaLine };
+      liveTurn.metaEl.textContent = metaLine;
+      log.push({ role: 'assistant', text: reply, thinking, steps, meta });
+      save();
+      await typewriter(liveTurn.bodyEl, reply);
+    } catch (err) {
+      liveCapsule.el.remove();
+      const message = String(err.message || err);
+      liveTurn.wrap.classList.add('error');
+      liveTurn.bodyEl.textContent = message;
+      liveTurn.metaEl.textContent = 'error';
+      log.push({ role: 'assistant', text: message, err: true, meta: { agent, line: 'error' } });
+      save();
+    } finally {
+      inFlight = false;
+      sendBtn.disabled = false;
+      scrollChat();
+    }
+  }
+
+  sendBtn.addEventListener('click', () => { const v = inputField.value; inputField.value = ''; autoGrow(); ask(v); });
+  inputField.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = inputField.value; inputField.value = ''; autoGrow(); ask(v); }
+  });
+  function autoGrow() { inputField.style.height = 'auto'; inputField.style.height = Math.min(140, inputField.scrollHeight) + 'px'; }
+  inputField.addEventListener('input', autoGrow);
+
+  agentSelect.addEventListener('change', () => { agent = agentSelect.value; save(); });
+  newBtn.addEventListener('click', () => {
+    history = []; log = []; save(); renderLog();
+  });
+
+  // ── System panel: log tail + browser stream ─────────────────────────────
+  let systemOpen = false;
+  systemBtn.addEventListener('click', () => {
+    systemOpen = !systemOpen;
+    sidePanel.classList.toggle('open', systemOpen);
+    systemBtn.classList.toggle('on', systemOpen);
+    systemBtn.setAttribute('aria-pressed', String(systemOpen));
+  });
+
+  function switchTab(which) {
+    tabLog.classList.toggle('on', which === 'log');
+    tabBrowser.classList.toggle('on', which === 'browser');
+    logBody.classList.toggle('on', which === 'log');
+    browserBody.classList.toggle('on', which === 'browser');
+    if (which === 'browser') connectBrowserWs(); else disconnectBrowserWs();
+  }
+  tabLog.addEventListener('click', () => switchTab('log'));
+  tabBrowser.addEventListener('click', () => switchTab('browser'));
+
+  function wsUrl(path) {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return proto + '//' + location.host + path;
+  }
+
+  function connectLogWs() {
+    const ws = new WebSocket(wsUrl('/ws/log'));
+    ws.onmessage = (ev) => {
+      let entry; try { entry = JSON.parse(ev.data); } catch { return; }
+      if (logEmpty) { logEmpty.remove(); }
+      const line = document.createElement('div');
+      line.className = 'log-line ' + (entry.status || '');
+      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = entry.status || '';
+      const cmd = document.createElement('span'); cmd.className = 'cmd'; cmd.textContent = entry.command || '';
+      line.append(tag, cmd);
+      if (entry.output) line.appendChild(document.createTextNode('\n' + entry.output.slice(0, 400)));
+      logBody.appendChild(line);
+      logBody.scrollTop = logBody.scrollHeight;
+    };
+    ws.onclose = () => setTimeout(connectLogWs, 3000);
+    ws.onerror = () => ws.close();
+  }
+
+  let browserWs = null;
+  function connectBrowserWs() {
+    if (browserWs) return;
+    browserView.innerHTML = '<div class="browser-note">Connecting…</div>';
+    browserWs = new WebSocket(wsUrl('/ws/browser'));
+    browserWs.binaryType = 'blob';
+    browserWs.onmessage = (ev) => {
+      if (typeof ev.data === 'string') return; // status message, ignore for now
+      const url = URL.createObjectURL(ev.data);
+      let img = browserView.querySelector('img');
+      if (!img) { browserView.innerHTML = ''; img = document.createElement('img'); browserView.appendChild(img); }
+      const old = img.src;
+      img.src = url;
+      if (old) URL.revokeObjectURL(old);
+    };
+    browserWs.onclose = () => { browserWs = null; };
+  }
+  function disconnectBrowserWs() {
+    if (browserWs) { browserWs.close(); browserWs = null; }
+    browserView.innerHTML = '<div class="browser-note">Opening the Browser tab connects the live view. Nothing streams until then.</div>';
+  }
+
+  async function pollStatus() {
+    try {
+      const resp = await fetch('/api/status');
+      const data = await resp.json();
+      statusDot.className = 'status-dot up';
+      statSha.textContent = data.update?.sha || '—';
+      const up = data.uptime_s || 0;
+      statUptime.textContent = Math.floor(up / 3600) + 'h' + Math.floor((up % 3600) / 60) + 'm';
+      statBrowser.textContent = data.browser?.mode ? data.browser.mode + (data.browser.open ? ' · open' : '') : 'idle';
+      statGroq.textContent = data.providers?.groq ? data.providers.groq.available + '/' + data.providers.groq.total : '—';
+      statGemini.textContent = data.providers?.gemini ? data.providers.gemini.available + '/' + data.providers.gemini.total : '—';
+    } catch {
+      statusDot.className = 'status-dot down';
+    }
+  }
+
+  load();
+  agentSelect.value = agent;
+  renderLog();
+  connectLogWs();
+  pollStatus();
+  setInterval(pollStatus, 10000);
+})();
+</script>
+</body>
+</html>

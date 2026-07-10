@@ -1,0 +1,16 @@
+[Unit]
+Description=Caden — personal agent daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/caden
+EnvironmentFile=/home/pi/caden/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
