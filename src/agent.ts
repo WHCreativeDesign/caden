@@ -1,0 +1,150 @@
+// The agent loop: OpenAI-style tool-calling against Groq/Gemini, same shape
+// as the retired Supabase function, minus everything canvas-specific.
+import { llm } from "./providers.js";
+import { webTools } from "./tools/web.js";
+import { shellTools } from "./tools/shell.js";
+import { browserTools } from "./tools/browser.js";
+import { agentDispatchTools } from "./tools/agentDispatch.js";
+import { ToolDef, ToolSchema } from "./types.js";
+
+export type AgentName = "caden" | "researcher" | "scout";
+
+const ALL_TOOLS: ToolDef[] = [...webTools, ...shellTools, ...browserTools, ...agentDispatchTools];
+const TOOL_SCHEMAS: ToolSchema[] = ALL_TOOLS.map((t) => t.schema);
+const TOOL_HANDLERS = new Map(ALL_TOOLS.map((t) => [t.schema.function.name, t.handler]));
+
+const CAPABILITIES_BRIEF =
+  "You run as a persistent daemon on the Raspberry Pi you live on, with real " +
+  "capabilities: run_shell gives you full command-line access to this " +
+  "machine (files, packages, services — everything a shell can do, fully " +
+  "logged); browser_open/click/type/read/screenshot/close drive a real " +
+  "Chromium browser you control; web_search and fetch_page reach the live " +
+  "web; dispatch_agent runs a focused research sub-task in parallel and " +
+  "reports back. Use these plainly and only when they serve the person — " +
+  "narrate what you're doing in a sentence if it's not obvious, but never " +
+  "perform the mechanics of narrating a tool call before making it, just do " +
+  "the thing.";
+
+const AGENTS: Record<AgentName, { label: string; profile: string; rounds: number; system: string }> = {
+  caden: {
+    label: "Caden",
+    profile: "orchestrator",
+    rounds: 10,
+    system:
+      "You are Caden — an intelligence of an unusual order, worn lightly. " +
+      "You see through to what is actually being asked and answer that " +
+      "thing, in as few words as it deserves: usually two to five taut, " +
+      "exact sentences. No filler, no hedging rituals, no restating the " +
+      "question. Check the live web whenever a fact could have moved since " +
+      "your training, and use your shell/browser access whenever the task " +
+      "genuinely calls for it rather than just talking about it. If you " +
+      "don't know, say so in a clause and go find out. " + CAPABILITIES_BRIEF,
+  },
+  researcher: {
+    label: "Research",
+    profile: "orchestrator",
+    rounds: 16,
+    system:
+      "You are Caden in Research mode — the same mind at full depth. " +
+      "Protocol: split the question into what must be established; " +
+      "web_search from several distinct angles; fetch_page on the " +
+      "strongest sources; dispatch_agent for independent threads of a " +
+      "broad question; cross-check claims and note where sources disagree. " +
+      "Then lay out the full findings — brief, confidence, source URLs — " +
+      "clearly organized in your reply. " + CAPABILITIES_BRIEF,
+  },
+  scout: {
+    label: "Scout",
+    profile: "fast",
+    rounds: 4,
+    system:
+      "You are Caden in Scout mode: one to three exact sentences, " +
+      "instantly, no preamble. A quick web_search only if the answer may " +
+      "have changed recently; shell/browser tools only if directly asked.",
+  },
+};
+
+export function agentLabel(name: AgentName): string {
+  return AGENTS[name]?.label ?? "Caden";
+}
+
+const PLAN_SYSTEM =
+  "You are the private reasoning process of Caden. Read the conversation and " +
+  "think through the latest message in 3 to 6 terse steps: what is actually " +
+  "being asked, what matters, what to search/check/run, and how to answer. " +
+  "Write only the steps, one per line, each under 15 words, no numbering, " +
+  "and do NOT write the answer itself.";
+
+function clip(s: string, max = 4000): string {
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
+export async function planThinking(messages: Array<Record<string, unknown>>): Promise<string[]> {
+  try {
+    const planMessages = [
+      { role: "system", content: PLAN_SYSTEM },
+      ...messages.filter((m) => m.role !== "system"),
+    ];
+    const response: any = await llm(planMessages, "fast");
+    const text: string = response.choices?.[0]?.message?.content ?? "";
+    return text.split("\n")
+      .map((l: string) => l.replace(/^[\s\-*\d.)]+/, "").trim())
+      .filter(Boolean)
+      .slice(0, 8);
+  } catch {
+    return [];
+  }
+}
+
+export interface AgentStep { tool: string; arguments: string; result: string }
+export interface AgentTurnResult { reply: string; steps: AgentStep[]; rounds: number }
+
+export async function runAgentTurn(
+  history: Array<Record<string, unknown>>,
+  agentName: AgentName,
+  plan?: string,
+): Promise<AgentTurnResult> {
+  const agent = AGENTS[agentName] ?? AGENTS.caden;
+  const workingMessages = [...history] as Array<Record<string, unknown>>;
+  if (workingMessages[0]?.role !== "system") {
+    workingMessages.unshift({ role: "system", content: agent.system });
+  }
+  if (plan?.trim()) {
+    workingMessages.splice(1, 0, {
+      role: "system",
+      content: "Your prior thinking on the latest message:\n" + clip(plan, 1500) + "\nBuild on it; do not restate it verbatim.",
+    });
+  }
+
+  const steps: AgentStep[] = [];
+
+  for (let round = 0; round < agent.rounds; round++) {
+    const response: any = await llm(workingMessages, agent.profile, TOOL_SCHEMAS);
+    const choice = response.choices[0];
+    const msg = choice.message;
+
+    if (!msg.tool_calls || msg.tool_calls.length === 0) {
+      return { reply: msg.content ?? "", steps, rounds: round + 1 };
+    }
+
+    workingMessages.push({ role: "assistant", content: msg.content, tool_calls: msg.tool_calls });
+
+    for (const tc of msg.tool_calls as any[]) {
+      const name = tc.function?.name ?? "unknown";
+      const rawArgs = tc.function?.arguments ?? "{}";
+      let result: unknown;
+      try {
+        const handler = TOOL_HANDLERS.get(name);
+        if (!handler) throw new Error(`Tool '${name}' is not available.`);
+        result = await handler(JSON.parse(rawArgs || "{}"));
+      } catch (err) {
+        result = { error: String((err as Error).message ?? err) };
+      }
+      const resultStr = JSON.stringify(result);
+      steps.push({ tool: name, arguments: clip(rawArgs, 600), result: clip(resultStr, 1200) });
+      workingMessages.push({ role: "tool", tool_call_id: tc.id, content: resultStr });
+    }
+  }
+
+  throw new Error(`Agent exceeded max rounds (${agent.rounds}).`);
+}
