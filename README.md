@@ -1,8 +1,8 @@
 # Caden
 
 A personal agent daemon that lives on a Raspberry Pi: real shell access, a
-browser it drives itself, live web search, and a retro-futuristic local web
-UI to talk to it and watch what it's doing.
+browser it drives itself, live web search, and a retro-futuristic
+industrial-terminal local web UI to talk to it and watch what it's doing.
 
 ## How it's built
 
@@ -18,7 +18,7 @@ UI to talk to it and watch what it's doing.
   browser view when the browser is running in streamed mode. Served locally
   from the Pi at `http://<pi-ip>:7777`.
 - **Terminal UI** — `caden-chat` (`src/cli.ts`), a colored terminal chat
-  client for a running Caden, matching the same synthwave palette. Talks to
+  client for a running Caden, matching the same amber palette. Talks to
   the same `/api/chat` the web UI uses.
 
 ## Installing on a Pi

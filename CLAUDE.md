@@ -57,8 +57,10 @@ src/
     shell.ts                     — run_shell + the audit log + the hardcoded deny list
     browser.ts                    — Playwright wrapper, local-display / streamed modes
     agentDispatch.ts               — dispatch_agent, a bounded parallel research sub-agent
+    memory.ts                       — remember tool + ~/.caden/memory.json (cross-session memory)
 public/
   index.html               — the whole web frontend: one self-contained file, no build step, no CDN deps
+                              (amber industrial-terminal look — "Domestic Agent System")
 bin/caden-chat             — thin wrapper exec'ing dist/cli.js; install.sh symlinks it to /usr/local/bin
 systemd/caden.service      — the service unit (Restart=always, WantedBy=multi-user.target)
 scripts/
@@ -73,14 +75,35 @@ scripts/
 
 Same shape it's always had: OpenAI-style `tools` + `tool_choice: auto`,
 looped until the model stops calling tools or hits `AGENTS[name].rounds`.
-Three personas in `agent.ts` — `caden` (plainspoken, a few taut sentences),
-`researcher` (deep multi-angle research, full findings laid out in the
-reply since there's no canvas to put them in), `scout` (1–3 sentences, fast
-model, rarely touches tools). A lightweight "plan" pass (`planThinking`)
-runs a cheap model first to produce a few private reasoning lines, shown
-live in the UI's thinking capsule before the real answer streams in — this
-is the one piece of "visible thinking" UX kept from the old canvas app,
-because it's genuinely good for the chat experience.
+Three personas in `agent.ts` — `caden` (a warm, economical personal
+assistant: a sentence or two, no over-explaining, no reciting its own
+features), `researcher` (deep multi-angle research, full findings laid out
+in the reply since there's no canvas to put them in), `scout` (1–3
+sentences, fast model, rarely touches tools). A lightweight "plan" pass
+(`planThinking`) runs a cheap model first to produce a few private reasoning
+lines, shown live in the UI's TRACE capsule before the real answer streams
+in.
+
+**Tone & relationship.** The `caden` persona is deliberately relational, not
+a research terminal: on first contact (see Memory below) it gives a short
+greeting, notices it hasn't met you, and asks your name before anything
+else; once you give it, it saves it and greets you by it from then on. The
+guiding rule is brevity and warmth — say the thing that matters and stop. If
+you're editing the persona, keep it short and resist the urge to make it
+list capabilities.
+
+## Memory
+
+`src/tools/memory.ts` persists what Caden knows about you across
+conversations in `~/.caden/memory.json` (`{ user_name, first_seen, notes }`).
+Each turn, `runAgentTurn` (and the plan pass) injects a `memoryContext`
+system message right after the persona: either "first contact, you don't
+know their name" or "their name is X; you also remember …". The `remember`
+tool writes to it — Caden calls it the moment it learns your name and for
+durable facts/preferences. "First contact" is defined by having no name and
+no notes yet, so the greeting stays honest even if a session is abandoned
+before a name is given. This is what makes the relational tone above
+actually true rather than faked per-session.
 
 ## Tools
 
@@ -99,6 +122,8 @@ because it's genuinely good for the chat experience.
 - **`dispatch_agent`** — a bounded (5-round) sub-agent with only the web
   tools, for parallel research threads. Returns findings as text for the
   parent to fold into its reply — no canvas to render it in anymore.
+- **`remember`** — persists the user's name and durable facts across
+  conversations. See Memory above.
 
 ## Key management
 

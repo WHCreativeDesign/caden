@@ -9,10 +9,9 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CURRENT_USER="$(whoami)"
 cd "$REPO_DIR"
 
-# ── Palette — matches public/index.html's synthwave theme ──────────────────
-C_CYAN=$'\033[96m'
-C_MAGENTA=$'\033[95m'
-C_VIOLET=$'\033[35m'
+# ── Palette — matches public/index.html's amber industrial-console theme ───
+C_AMBER=$'\033[93m'
+C_AMBER2=$'\033[33m'
 C_DIM=$'\033[2m'
 C_BOLD=$'\033[1m'
 C_GREEN=$'\033[92m'
@@ -21,12 +20,12 @@ C_RESET=$'\033[0m'
 
 banner() {
   echo ""
-  printf "  %s%sC A D E N%s  %s— setup%s\n" "$C_BOLD" "$C_CYAN" "$C_RESET" "$C_DIM" "$C_RESET"
+  printf "  %s%sCADEN%s  %s// setup%s\n" "$C_BOLD" "$C_AMBER" "$C_RESET" "$C_DIM" "$C_RESET"
   printf "  %s%s%s\n" "$C_DIM" "$REPO_DIR" "$C_RESET"
   echo ""
 }
 
-say() { printf "  %s%s%s\n" "$C_VIOLET" "$1" "$C_RESET"; }
+say() { printf "  %s%s%s\n" "$C_AMBER2" "$1" "$C_RESET"; }
 note() { printf "  %s%s%s\n" "$C_DIM" "$1" "$C_RESET"; }
 fail() { printf "  %sx %s%s\n" "$C_RED" "$1" "$C_RESET"; exit 1; }
 
@@ -41,7 +40,7 @@ run_step() {
   local i=0
   while kill -0 "$pid" 2>/dev/null; do
     i=$(( (i + 1) % ${#spin} ))
-    printf "\r  %s%s%s %s" "$C_CYAN" "${spin:$i:1}" "$C_RESET" "$label"
+    printf "\r  %s%s%s %s" "$C_AMBER" "${spin:$i:1}" "$C_RESET" "$label"
     sleep 0.08
   done
   if wait "$pid"; then
@@ -111,18 +110,18 @@ gemini_keys="$existing_gemini"
 if [ "$INTERACTIVE" -eq 1 ]; then
   suffix=""
   [ -n "$existing_groq" ] && suffix=" ${C_DIM}(Enter to keep current)${C_RESET}"
-  printf "\n  %sGROQ_API_KEYS%s%s\n" "$C_MAGENTA" "$C_RESET" "$suffix"
+  printf "\n  %sGROQ_API_KEYS%s%s\n" "$C_AMBER2" "$C_RESET" "$suffix"
   note "comma-separated, e.g. gsk_abc...,gsk_def..."
-  printf "  %s>%s " "$C_CYAN" "$C_RESET"
+  printf "  %s>%s " "$C_AMBER" "$C_RESET"
   input=""
   { read -r input < /dev/tty; } 2>/dev/null || true
   [ -n "$input" ] && groq_keys="$input"
 
   suffix=""
   [ -n "$existing_gemini" ] && suffix=" ${C_DIM}(Enter to keep current)${C_RESET}"
-  printf "\n  %sGEMINI_API_KEYS%s%s %s(optional — Enter to skip)%s\n" "$C_MAGENTA" "$C_RESET" "$suffix" "$C_DIM" "$C_RESET"
+  printf "\n  %sGEMINI_API_KEYS%s%s %s(optional — Enter to skip)%s\n" "$C_AMBER2" "$C_RESET" "$suffix" "$C_DIM" "$C_RESET"
   note "comma-separated, e.g. AIzaSy...,AIzaSy..."
-  printf "  %s>%s " "$C_CYAN" "$C_RESET"
+  printf "  %s>%s " "$C_AMBER" "$C_RESET"
   input=""
   { read -r input < /dev/tty; } 2>/dev/null || true
   [ -n "$input" ] && gemini_keys="$input"

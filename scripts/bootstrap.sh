@@ -10,12 +10,12 @@ REPO_URL="https://github.com/WHCreativeDesign/caden.git"
 BRANCH="${CADEN_BRANCH:-main}"
 INSTALL_DIR="${CADEN_DIR:-$HOME/caden}"
 
-C_CYAN=$'\033[96m'
+C_AMBER=$'\033[93m'
 C_DIM=$'\033[2m'
 C_BOLD=$'\033[1m'
 C_RESET=$'\033[0m'
 
-printf "\n  %s%sC A D E N%s  %s— bootstrap%s\n\n" "$C_BOLD" "$C_CYAN" "$C_RESET" "$C_DIM" "$C_RESET"
+printf "\n  %s%sCADEN%s  %s// bootstrap%s\n\n" "$C_BOLD" "$C_AMBER" "$C_RESET" "$C_DIM" "$C_RESET"
 
 if ! command -v git >/dev/null 2>&1; then
   echo "  Installing git…"

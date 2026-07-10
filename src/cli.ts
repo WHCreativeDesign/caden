@@ -1,41 +1,41 @@
 #!/usr/bin/env node
 // A terminal chat client for a running Caden daemon — talks to the same
-// /api/chat the web UI uses, styled with the same synthwave palette. Run
-// with `npm run chat` (or `caden-chat` if scripts/install.sh symlinked it).
+// /api/chat the web UI uses, styled with the same amber industrial-console
+// palette. Run with `npm run chat` (or `caden-chat` if scripts/install.sh
+// symlinked it).
 import * as readline from "node:readline";
 import { loadDotEnvIfPresent } from "./env.js";
 
 loadDotEnvIfPresent();
 
-const CYAN = "\x1b[38;2;0;255;242m";
-const MAGENTA = "\x1b[38;2;255;43;214m";
-const VIOLET = "\x1b[38;2;139;92;246m";
+const AMBER = "\x1b[38;2;244;167;29m";
+const RED = "\x1b[38;2;229;83;75m";
 const DIM = "\x1b[2m";
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
 const CLEAR_LINE = "\x1b[2K\r";
 
 const HOST = process.env.CADEN_HOST || `http://localhost:${process.env.PORT || 7777}`;
-const AGENT_LABELS: Record<string, string> = { caden: "Caden", researcher: "Caden — Research", scout: "Caden — Scout" };
+const AGENT_LABELS: Record<string, string> = { caden: "Caden", researcher: "Research", scout: "Scout" };
 
 let agent: "caden" | "researcher" | "scout" = "caden";
 let history: Array<{ role: string; content: string }> = [];
 
 function banner() {
   console.log("");
-  console.log(`  ${BOLD}${CYAN}C A D E N${RESET}  ${DIM}— terminal${RESET}`);
+  console.log(`  ${BOLD}${AMBER}CADEN${RESET}  ${DIM}// domestic agent system${RESET}`);
   console.log(`  ${DIM}${HOST}${RESET}`);
   console.log(`  ${DIM}/agent <caden|researcher|scout>  /new  /status  /quit${RESET}`);
   console.log("");
 }
 
 function printAssistant(text: string, thinking: string[], steps: Array<{ tool: string; arguments: string; result: string }>, err = false) {
-  const color = err ? MAGENTA : CYAN;
+  const color = err ? RED : AMBER;
   if (thinking.length || steps.length) {
-    for (const line of thinking) console.log(`  ${DIM}· ${line}${RESET}`);
-    for (const step of steps) console.log(`  ${DIM}· ${RESET}${VIOLET}${step.tool}${RESET}${DIM} ${step.arguments} → ${step.result.slice(0, 140)}${RESET}`);
+    for (const line of thinking) console.log(`  ${DIM}> ${line}${RESET}`);
+    for (const step of steps) console.log(`  ${DIM}> ${RESET}${AMBER}${step.tool}${RESET}${DIM} ${step.arguments} -> ${step.result.slice(0, 140)}${RESET}`);
   }
-  console.log(`  ${BOLD}${color}${(AGENT_LABELS[agent] || "Caden").toUpperCase()}${RESET}`);
+  console.log(`  ${BOLD}${color}${(err ? "CADEN // OFFLINE" : AGENT_LABELS[agent] || "Caden").toUpperCase()}${RESET}`);
   console.log(`  ${text}`);
   console.log("");
 }
@@ -53,7 +53,7 @@ async function callApi(path: string, body?: unknown) {
 
 async function ask(text: string) {
   history.push({ role: "user", content: text });
-  process.stdout.write(`  ${DIM}thinking…${RESET}`);
+  process.stdout.write(`  ${DIM}working // processing request${RESET}`);
   try {
     const data: any = await callApi("/api/chat", { agent, messages: history });
     process.stdout.write(CLEAR_LINE);
@@ -63,7 +63,7 @@ async function ask(text: string) {
   } catch (err) {
     process.stdout.write(CLEAR_LINE);
     history.pop();
-    console.log(`  ${MAGENTA}error${RESET} — ${String((err as Error).message ?? err)}`);
+    console.log(`  ${RED}error${RESET} — ${String((err as Error).message ?? err)}`);
     console.log("");
   }
 }
@@ -74,13 +74,13 @@ async function showStatus() {
     console.log(`  ${DIM}sha${RESET} ${data.update?.sha ?? "—"}   ${DIM}uptime${RESET} ${data.uptime_s ?? 0}s   ${DIM}browser${RESET} ${data.browser?.mode ?? "idle"}`);
     console.log(`  ${DIM}groq keys${RESET} ${data.providers?.groq?.available ?? 0}/${data.providers?.groq?.total ?? 0}   ${DIM}gemini keys${RESET} ${data.providers?.gemini?.available ?? 0}/${data.providers?.gemini?.total ?? 0}`);
   } catch (err) {
-    console.log(`  ${MAGENTA}error${RESET} — ${String((err as Error).message ?? err)}`);
+    console.log(`  ${RED}error${RESET} — ${String((err as Error).message ?? err)}`);
   }
   console.log("");
 }
 
 function prompt(rl: readline.Interface) {
-  rl.setPrompt(`  ${CYAN}›${RESET} `);
+  rl.setPrompt(`  ${AMBER}>${RESET} `);
   rl.prompt();
 }
 
