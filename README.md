@@ -21,14 +21,19 @@ UI to talk to it and watch what it's doing.
 ## Running it on a Pi
 
 ```
-git clone <this repo> caden && cd caden
+git clone https://github.com/WHCreativeDesign/caden.git caden
+cd caden
 ./scripts/install.sh      # installs deps, Playwright's Chromium, the systemd service
-$EDITOR .env               # add GROQ_API_KEYS / GEMINI_API_KEYS
+nano .env                  # add GROQ_API_KEYS / GEMINI_API_KEYS, then save (Ctrl+O, Ctrl+X)
 sudo systemctl start caden
 ```
 
+(If this pivot hasn't been merged to `main` yet, add `-b <branch>` to the
+`git clone` line for whichever branch has it.)
+
 Caden then runs on boot automatically, restarts itself when it pulls new
-commits from `main` (no Pi reboot needed), and serves its UI on the LAN.
+commits from the tracked branch (`UPDATE_BRANCH` in `.env`, default `main`;
+no Pi reboot needed), and serves its UI on the LAN.
 
 Design and governance notes live in [CLAUDE.md](CLAUDE.md). Legacy
 design-system files (`tokens/`, `components/`, `guidelines/`) predate the
