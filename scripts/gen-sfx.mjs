@@ -31,6 +31,24 @@ function silence(ms) {
   return new Float64Array(Math.round((ms / 1000) * SAMPLE_RATE));
 }
 
+// A perfectly seamless loop unit: no fade envelope (which would leave an
+// audible dip at the wrap point), and both the carrier and its amplitude
+// modulator are constrained to complete a whole number of cycles within
+// `ms` — so sample[0] and the sample just past the end are bit-identical to
+// where the previous repetition left off. Web Audio's loop=true just plays
+// the buffer back to back, so periodicity is the only thing that matters.
+function loopableTone({ ms, carrierFreq, modFreq, gainBase, gainDepth }) {
+  const n = Math.round((ms / 1000) * SAMPLE_RATE);
+  const samples = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / SAMPLE_RATE;
+    const carrier = Math.sin(2 * Math.PI * carrierFreq * t);
+    const env = gainBase + gainDepth * (0.5 + 0.5 * Math.sin(2 * Math.PI * modFreq * t));
+    samples[i] = carrier * env;
+  }
+  return samples;
+}
+
 function concat(...parts) {
   const total = parts.reduce((s, p) => s + p.length, 0);
   const out = new Float64Array(total);
@@ -88,10 +106,12 @@ const error = concat(
   tone({ freq: 146.83, ms: 200, type: "square", gain: 0.24, fadeMs: 6 }),
 );
 
-// "thinking" — a brief, quiet single tick. Plays once per turn that needs
-// real tool work, so it has to be unobtrusive enough to hear often without
-// being annoying — much quieter/shorter than the others.
-const thinking = tone({ freq: 392.0, ms: 45, gain: 0.18, fadeMs: 10 });
+// "thinking" — a soft, slowly-breathing hum, looped for as long as a turn
+// is actually doing tool work (see startThinkingLoop in sfx.ts / loop=true
+// in index.html) rather than a single blip — 330Hz carrier with a gentle
+// 3Hz pulse, both an exact whole number of cycles over 1 second so the loop
+// point is inaudible.
+const thinking = loopableTone({ ms: 1000, carrierFreq: 330, modFreq: 3, gainBase: 0.09, gainDepth: 0.05 });
 
 // "reminder" — a warm two-tone doorbell-style chime (perfect fourth up),
 // deliberately the most attention-getting sound since it fires unprompted.

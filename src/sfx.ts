@@ -112,9 +112,14 @@ export const sfxEvents = new EventEmitter();
 // stderr to both the journal AND the live SYSTEM LOG panel (auditEvents,
 // the same channel run_shell uses), so it shows up immediately from the
 // Options tab's "test sound" buttons without needing a terminal.
-function playLocal(event: SfxEvent) {
+//
+// onDone(err) fires once this single playthrough finishes — err is null on
+// success (either aplay or paplay actually played it), or the failure
+// detail if both did not. Used directly for one-shot events, and chained
+// repeatedly by startThinkingLoop() below for a looping one.
+function spawnPlay(event: SfxEvent, onDone: (err: string | null) => void): void {
   const file = SFX_FILES[event];
-  if (!existsSync(file)) return;
+  if (!existsSync(file)) { onDone("missing file"); return; }
   // SFX_AUDIO_DEVICE lets you force a specific ALSA device (e.g.
   // "plughw:0,0" for the Pi's onboard analog jack) when the system default
   // routes elsewhere (HDMI is a common default even with headphones
@@ -137,6 +142,7 @@ function playLocal(event: SfxEvent) {
         const overhead = clamp(wallMs - SFX_DURATIONS_MS[event], 0, 400);
         calibratedLatencyMs = calibratedLatencyMs * 0.6 + overhead * 0.4;
       }
+      onDone(null);
       return;
     }
     // paplay needs a reachable PulseAudio user socket — which a systemd
@@ -147,7 +153,7 @@ function playLocal(event: SfxEvent) {
     const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
     const env = { ...process.env, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || (uid !== undefined ? `/run/user/${uid}` : "") };
     execFile("paplay", [file], { env }, (paErr, _po, paStderr) => {
-      if (!paErr) return;
+      if (!paErr) { onDone(null); return; }
       const detail = [String(aplayStderr || aplayErr.message || "").trim(), String(paStderr || paErr.message || "").trim()]
         .filter(Boolean).join(" | ") || "no audio output reachable";
       console.error(`[sfx] playback failed for ${file}: ${detail}`);
@@ -158,18 +164,53 @@ function playLocal(event: SfxEvent) {
         status: "error",
         output: detail.slice(0, 500),
       });
+      onDone(detail);
     });
   });
+}
+
+// "thinking" is the one looping sound — soft ambient hum for as long as a
+// turn is actually doing tool work, not a single blip, since that can go on
+// for several rounds of browsing/research. Implemented as a respawn chain
+// (play the loop unit, and the instant it finishes, play it again) rather
+// than relying on any --loop flag aplay may or may not support — simple,
+// portable, and any tiny gap between repetitions is inaudible for a soft
+// ambient texture like this (unlike a tight music loop). Stops itself if
+// playback ever actually fails, rather than spamming retries forever.
+let thinkingActive = false;
+
+function startThinkingLoop(): void {
+  if (thinkingActive) return;
+  thinkingActive = true;
+  const tick = () => {
+    if (!thinkingActive) return;
+    spawnPlay("thinking", (err) => {
+      if (err) { thinkingActive = false; return; }
+      if (thinkingActive) tick();
+    });
+  };
+  tick();
+}
+
+export function stopThinkingLoop(): void {
+  thinkingActive = false;
 }
 
 // Triggers a status sound: broadcasts playAt for any listening browser to
 // schedule itself against (see /ws/sfx in server.ts), and schedules the
 // Pi's own local playback *compensated* for its measured startup overhead
-// so the two land together instead of the Pi trailing behind.
-export function triggerSfx(event: SfxEvent) {
+// so the two land together instead of the Pi trailing behind. Any event
+// other than "thinking" stops a currently-running thinking loop first —
+// the natural end of a turn (success/error) is what should silence it, and
+// that doesn't need lookahead precision the way audible sync does.
+export function triggerSfx(event: SfxEvent): void {
+  if (event !== "thinking") stopThinkingLoop();
   const playAt = Date.now() + LOOKAHEAD_MS;
   sfxEvents.emit("play", { event, play_at: playAt });
   const execAt = playAt - currentLocalLatencyMs();
   const delay = Math.max(0, execAt - Date.now());
-  setTimeout(() => playLocal(event), delay);
+  setTimeout(() => {
+    if (event === "thinking") startThinkingLoop();
+    else spawnPlay(event, () => {});
+  }, delay);
 }

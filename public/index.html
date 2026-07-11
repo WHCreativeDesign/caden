@@ -415,6 +415,10 @@
               <span class="ctl"><button class="btn" id="optSfxBtn">On</button></span>
             </div>
             <div class="opt-row">
+              <span class="k">Voice (SAM TTS)<small>Reads Caden's replies aloud</small></span>
+              <span class="ctl"><button class="btn" id="optTtsBtn">On</button></span>
+            </div>
+            <div class="opt-row">
               <span class="k">Test a sound<small>Plays locally right now, no chat turn needed</small></span>
               <span class="ctl">
                 <button class="btn" data-sfx-test="sent">Sent</button>
@@ -499,6 +503,9 @@
   <div class="footer up">Caden Agent Console // For Indoor Use Only // Full System Access Enabled</div>
 </div>
 
+<!-- SAM (Software Automatic Mouth) — vendored locally, no CDN. See
+     scripts/vendor-sam.sh. Exposes window.SamJs. -->
+<script src="/vendor/samjs.min.js"></script>
 <script>
 (() => {
   'use strict';
@@ -515,7 +522,7 @@
   const linkDot = $('linkDot'), linkText = $('linkText'), sysText = $('sysText');
   const keySeg = $('keySeg');
   const tMainframe = $('tMainframe'), tSha = $('tSha'), tUptime = $('tUptime'), tGroq = $('tGroq'), tGemini = $('tGemini'), tBrowser = $('tBrowser'), tClock = $('tClock');
-  const optSfxBtn = $('optSfxBtn'), optBrowserMode = $('optBrowserMode'), optBrowserRestart = $('optBrowserRestart');
+  const optSfxBtn = $('optSfxBtn'), optTtsBtn = $('optTtsBtn'), optBrowserMode = $('optBrowserMode'), optBrowserRestart = $('optBrowserRestart');
   const optUpdateInterval = $('optUpdateInterval'), optCheckNow = $('optCheckNow'), optUpdateMeta = $('optUpdateMeta');
   const optMemorySummary = $('optMemorySummary'), optForget = $('optForget'), optRawStatus = $('optRawStatus');
   const optSfxTiming = $('optSfxTiming');
@@ -685,6 +692,7 @@
       live.metaEl.textContent = metaLine;
       log.push({ role: 'assistant', text: reply, thinking, steps, meta: { line: metaLine } });
       save();
+      speakCaden(reply);
       await typewriter(live.body, reply);
     } catch (err) {
       trace.el.remove();
@@ -695,6 +703,7 @@
       live.metaEl.textContent = 'ERROR';
       log.push({ role: 'assistant', text: message, err: true, meta: { line: 'ERROR' } });
       save();
+      speakCaden(message);
     } finally {
       inFlight = false; sendBtn.disabled = false;
       setSys('ONLINE // AWAITING INPUT');
@@ -889,12 +898,30 @@
     });
   });
 
+  // "thinking" loops (see startThinkingLoop in sfx.ts for the Pi-side
+  // mirror) — Web Audio's loop=true just replays the same buffer back to
+  // back, sample-accurate, so the seamless-loop WAV (no fade, whole-cycle
+  // periodicity) never clicks at the wrap point. Any other event stops it
+  // immediately, same handoff semantics as the server side.
+  let thinkingSource = null;
+  function stopThinkingSource() {
+    if (thinkingSource) {
+      try { thinkingSource.stop(); } catch {}
+      thinkingSource = null;
+    }
+  }
+
   function playSfxAt(name, playAtMs) {
+    if (name !== 'thinking') stopThinkingSource();
     if (!sfxEnabled || !audioCtx || !sfxBuffers[name]) return;
     const delaySec = Math.max(0, (playAtMs - Date.now()) / 1000);
     const src = audioCtx.createBufferSource();
     src.buffer = sfxBuffers[name];
     src.connect(audioCtx.destination);
+    if (name === 'thinking') {
+      src.loop = true;
+      thinkingSource = src;
+    }
     src.start(audioCtx.currentTime + delaySec);
   }
 
@@ -907,6 +934,47 @@
     };
     sfxWs.onclose = () => setTimeout(connectSfxWs, 3000);
     sfxWs.onerror = () => sfxWs.close();
+  }
+
+  // ── Voice (SAM TTS) ───────────────────────────────────────────────────────
+  // Reads Caden's replies aloud with the classic 1982 SAM engine (see
+  // scripts/vendor-sam.sh) — same "self-contained, no CDN" approach as the
+  // status SFX above. Its own AudioContext is managed internally by sam-js,
+  // separate from the one used for SFX.
+  let ttsEnabled = true;
+  try { ttsEnabled = localStorage.getItem('caden.tts') !== 'off'; } catch {}
+  let sam = null;
+  let currentSpeech = null;
+
+  function setTtsBtn() {
+    optTtsBtn.textContent = ttsEnabled ? 'On' : 'Off';
+    optTtsBtn.setAttribute('aria-pressed', String(ttsEnabled));
+    optTtsBtn.style.opacity = ttsEnabled ? '1' : '0.55';
+  }
+  setTtsBtn();
+  optTtsBtn.addEventListener('click', () => {
+    ttsEnabled = !ttsEnabled;
+    try { localStorage.setItem('caden.tts', ttsEnabled ? 'on' : 'off'); } catch {}
+    setTtsBtn();
+    if (!ttsEnabled && currentSpeech) { try { currentSpeech.abort('muted'); } catch {} currentSpeech = null; }
+  });
+
+  // SAM's reciter treats "Caden" as an ordinary word and mispronounces it
+  // ("CAD-en") — respelling it phonetically as "Kayden" before it ever
+  // reaches the TTS engine gets the correct "KAY-den" without touching what's
+  // actually displayed in the chat.
+  function ttsText(text) {
+    return String(text || '').replace(/\bcaden\b/gi, 'Kayden');
+  }
+
+  function speakCaden(text) {
+    if (!ttsEnabled || !text || !window.SamJs) return;
+    if (currentSpeech) { try { currentSpeech.abort('superseded'); } catch {} currentSpeech = null; }
+    if (!sam) sam = new window.SamJs({ speed: 72, pitch: 64, mouth: 128, throat: 128 });
+    try {
+      currentSpeech = sam.speak(ttsText(text));
+      currentSpeech.catch(() => {}).finally(() => { currentSpeech = null; });
+    } catch {}
   }
 
   // ── Reminders ─────────────────────────────────────────────────────────────

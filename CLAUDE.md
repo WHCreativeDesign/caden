@@ -68,9 +68,13 @@ public/
                               (amber industrial-terminal look — "Domestic Agent System")
   sfx/*.wav                — synthesized status sounds (sent/success/error/thinking/reminder/startup),
                               served statically and also played locally on the Pi by src/sfx.ts
+  vendor/samjs.min.js      — SAM (Software Automatic Mouth) TTS engine, vendored locally (see
+                              scripts/vendor-sam.sh) — no CDN dependency, same as the SFX assets
 bin/caden-chat             — thin wrapper exec'ing dist/cli.js; install.sh symlinks it to /usr/local/bin
 systemd/caden.service      — the service unit (Restart=always, WantedBy=multi-user.target)
 scripts/
+  vendor-sam.sh             — copies sam-js's browser build into public/vendor/ (re-run after bumping
+                               the sam-js devDependency; not part of npm run build, no bundler here)
   bootstrap.sh              — the single curl-pipeable installer: clones/updates the repo, then hands
                                off to install.sh (its own `read` prompts go via /dev/tty since the
                                curl|bash pipe consumes stdin — see install.sh's key-entry section)
@@ -120,11 +124,11 @@ otherwise need to SSH in and either edit `.env` + restart, or poke at with
 `curl`, for. Every control there is backed by a real endpoint, not a fake
 toggle:
 
-- **Audio** — the SFX On/Off toggle (moved here from the Session panel), six
-  "test sound" buttons that hit `POST /api/sfx/test {event}` to fire any of
-  the six status sounds immediately without needing a real chat turn, and a
-  live readout of the current lookahead/compensation values (see Status SFX
-  below).
+- **Audio** — the SFX On/Off toggle (moved here from the Session panel), a
+  separate Voice (SAM TTS) On/Off toggle, six "test sound" buttons that hit
+  `POST /api/sfx/test {event}` to fire any of the six status sounds
+  immediately without needing a real chat turn, and a live readout of the
+  current lookahead/compensation values (see Status SFX below).
 - **Browser** — a mode override (`POST /api/browser/mode`) that beats
   `BROWSER_MODE` from `.env` at runtime (`setModeOverride` in
   `tools/browser.ts`), plus a Restart button (`POST /api/browser/restart` →
@@ -331,9 +335,11 @@ synthesized (not downloaded) into `public/sfx/*.wav` via
 `scripts/gen-sfx.mjs` (see that script's comments, since there's no
 license/CDN dependency this way):
 - `sent` — the server received a message.
-- `thinking` — fired once per turn, the moment it starts actually using
-  tools (not on every reply) — an audible "on it" for turns that take a few
-  rounds of browsing/research and would otherwise go quiet for a while.
+- `thinking` — the one looping sound: starts the moment a turn begins
+  actually using tools (not on every reply), and keeps softly looping until
+  the turn resolves — an audible "still on it" for turns that take several
+  rounds of browsing/research, rather than a single blip followed by silence.
+  See "Looping SFX" below for how the loop itself works.
 - `success` — the reply completed.
 - `error` — the turn failed.
 - `reminder` — a reminder came due (see Reminders above) — deliberately the
@@ -386,6 +392,68 @@ to hear about it wins." Verified live in this sandbox (no real audio
 hardware to hear it) that the broadcast lead time and WAV-header duration
 parsing are both correct; the actual startup-overhead measurement can only
 be validated on the real Pi where `aplay` exists.
+
+**Looping SFX (`thinking`).** `thinking.wav` isn't a blip — it's a 1-second
+seamless loop unit (`loopableTone()` in `gen-sfx.mjs`): a soft carrier tone
+with a gentle amplitude pulse, both constrained to complete a *whole number*
+of cycles within the buffer (330 and 3 respectively), so `sample[0]` picks
+up exactly where the end of the buffer left off — verified directly against
+the generated WAV (the sample-to-sample delta across the wrap point matches
+the delta just inside the loop exactly). No fade envelope either, since a
+fade-to-silence would itself create an audible dip every repetition.
+
+The browser just sets `AudioBufferSourceNode.loop = true` — Web Audio
+replays a looping buffer back-to-back with no gap by construction. The Pi
+has no equivalent native flag it can rely on portably, so `sfx.ts`'s
+`startThinkingLoop()` does it manually: play the loop unit, and the instant
+that single `aplay` call's callback fires, immediately play it again,
+chaining for as long as `thinkingActive` stays true. A few tens of
+milliseconds of process-spawn gap between repetitions is inaudible for a
+soft ambient texture like this (it would matter for a tight music loop, not
+here). If playback ever actually fails, the chain stops itself rather than
+retrying forever and spamming the log.
+
+Both sides stop on the *next* non-`thinking` event (`triggerSfx()` calls
+`stopThinkingLoop()` first thing whenever `event !== "thinking"`; the
+browser's `playSfxAt()` does the mirror-image `stopThinkingSource()`) —
+naturally, since a turn only ever transitions from `thinking` to `success`
+or `error`. This handoff doesn't need lookahead precision; the *new*
+sound's `playAt` is what's actually synced, the loop just needs to get out
+of the way. The Options tab's "Thinking" test button auto-stops itself
+after 8s (`POST /api/sfx/test`) so a manual test never loops on the
+speaker forever if nothing else happens to stop it.
+
+Verified live (fake `aplay` stub in this sandbox, since there's no real
+audio hardware here): the respawn chain kept calling `aplay` continuously
+while active, and calling `triggerSfx("success")` stopped it immediately
+with zero further calls — and in a real headless browser, the
+`AudioBufferSourceNode` was confirmed to start with `loop=true` and receive
+an explicit `.stop()` call the instant a `success` event arrived.
+
+## Voice (SAM text-to-speech)
+
+Caden's replies are read aloud by SAM (Software Automatic Mouth) — a
+vanilla-JS port of the actual 1982 C64 TTS engine (`sam-js` on npm,
+zero dependencies), vendored locally via `scripts/vendor-sam.sh` into
+`public/vendor/samjs.min.js` (no CDN, same philosophy as everything else
+self-contained in this app). `ask()` in `index.html` calls `speakCaden()`
+right as a reply/error arrives, alongside the typewriter animation — the
+two aren't word-synced, they just start together.
+
+**The "Kayden" pronunciation fix.** SAM's reciter treats "Caden" as an
+ordinary word and phonemicizes it wrong (`KAEDEHN` — "CAD-en"). Respelling
+it "Kayden" before it ever reaches SAM fixes this (`KEY5DEHN` — correct
+"KAY-den") — verified directly against `SamJs.convert()`'s actual phoneme
+output for both spellings, not assumed. `ttsText()` in `index.html` does a
+plain case-insensitive `\bcaden\b` → `Kayden` substitution on the text
+handed to `speakCaden()` only — what's actually displayed in the chat is
+untouched.
+
+A new `speakCaden()` call aborts whatever SAM utterance is still in flight
+first (`currentSpeech.abort()`) so a fast follow-up message doesn't overlap
+garbled speech with the previous reply. TTS has its own On/Off toggle in
+the Options tab (`localStorage`-persisted, independent of the status SFX
+toggle) — turning it off also aborts anything currently speaking.
 
 Requires `aplay` (alsa-utils) or `paplay` (pulseaudio-utils) on the Pi —
 `install.sh` installs both. The web UI has an SFX On/Off toggle

@@ -25,6 +25,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.14.0",
     "@types/ws": "^8.5.12",
+    "sam-js": "^0.3.1",
     "typescript": "^5.5.4"
   }
 }

@@ -9,7 +9,7 @@ import { auditEvents } from "./tools/shell.js";
 import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval, setModeOverride, closeBrowser } from "./tools/browser.js";
 import { updateStatus, setUpdateInterval, checkNow } from "./update.js";
 import { MAINFRAME_VERSION } from "./version.js";
-import { sfxEvents, triggerSfx, sfxStatus, SfxEvent } from "./sfx.js";
+import { sfxEvents, triggerSfx, sfxStatus, stopThinkingLoop, SfxEvent } from "./sfx.js";
 import { loadMemory, forgetMemory } from "./tools/memory.js";
 import { reminderEvents, listReminders } from "./tools/reminders.js";
 
@@ -79,6 +79,10 @@ export function startServer() {
     const event = req.body?.event;
     if (!SFX_EVENTS.includes(event)) return res.status(400).json({ error: `event must be one of: ${SFX_EVENTS.join(", ")}` });
     triggerSfx(event as SfxEvent);
+    // "thinking" loops until something stops it (a real turn ending) — a
+    // manual test has no such follow-up, so auto-stop it rather than
+    // leaving it looping on the speaker indefinitely if someone forgets.
+    if (event === "thinking") setTimeout(stopThinkingLoop, 8000);
     res.json({ ok: true });
   });
 
