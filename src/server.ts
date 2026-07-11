@@ -6,10 +6,11 @@ import { dirname, join } from "node:path";
 import { AgentName, agentLabel, planThinking, runAgentTurn } from "./agent.js";
 import { providerStatus } from "./providers.js";
 import { auditEvents } from "./tools/shell.js";
-import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval } from "./tools/browser.js";
-import { updateStatus } from "./update.js";
+import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval, setModeOverride, closeBrowser } from "./tools/browser.js";
+import { updateStatus, setUpdateInterval, checkNow } from "./update.js";
 import { MAINFRAME_VERSION } from "./version.js";
-import { sfxEvents, triggerSfx } from "./sfx.js";
+import { sfxEvents, triggerSfx, SfxEvent } from "./sfx.js";
+import { loadMemory, forgetMemory } from "./tools/memory.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, "..", "public");
@@ -38,6 +39,43 @@ export function startServer() {
     const ms = Number(req.body?.interval_ms);
     if (!Number.isFinite(ms)) return res.status(400).json({ error: "interval_ms must be a number" });
     res.json({ interval_ms: setStreamInterval(ms) });
+  });
+
+  // ── Options / debug panel ────────────────────────────────────────────
+  app.post("/api/browser/mode", (req, res) => {
+    const mode = req.body?.mode;
+    if (!["auto", "local", "stream"].includes(mode)) return res.status(400).json({ error: "mode must be auto, local, or stream" });
+    res.json({ mode_override: setModeOverride(mode === "auto" ? null : mode) });
+  });
+
+  app.post("/api/browser/restart", async (_req, res) => {
+    await closeBrowser();
+    res.json({ ok: true });
+  });
+
+  app.post("/api/update/interval", (req, res) => {
+    const ms = Number(req.body?.interval_ms);
+    if (!Number.isFinite(ms)) return res.status(400).json({ error: "interval_ms must be a number" });
+    res.json({ interval_ms: setUpdateInterval(ms) });
+  });
+
+  app.post("/api/update/check-now", async (_req, res) => {
+    res.json(await checkNow());
+  });
+
+  app.get("/api/memory", (_req, res) => {
+    res.json(loadMemory());
+  });
+
+  app.post("/api/memory/forget", (_req, res) => {
+    res.json(forgetMemory());
+  });
+
+  app.post("/api/sfx/test", (req, res) => {
+    const event = req.body?.event;
+    if (!["sent", "success", "error"].includes(event)) return res.status(400).json({ error: "event must be sent, success, or error" });
+    triggerSfx(event as SfxEvent);
+    res.json({ ok: true });
   });
 
   app.post("/api/chat", async (req, res) => {

@@ -34,6 +34,14 @@ function saveMemory(m: Memory) {
   writeFileSync(MEM_FILE, JSON.stringify(m, null, 2));
 }
 
+// The Options panel's "Forget Me" control — a full reset back to first
+// contact, for testing the greeting flow or actually asking Caden to forget.
+export function forgetMemory(): Memory {
+  const empty: Memory = { notes: [] };
+  saveMemory(empty);
+  return empty;
+}
+
 // First contact = we don't yet know their name and have no notes, regardless
 // of whether first_seen has been stamped. Keeps the "have we met?" question
 // honest even if a session was abandoned before a name was given.

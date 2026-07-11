@@ -109,6 +109,38 @@ no notes yet, so the greeting stays honest even if a session is abandoned
 before a name is given. This is what makes the relational tone above
 actually true rather than faked per-session.
 
+## Options / debug panel
+
+The web UI's fourth tab (`viewOptions` in `public/index.html`) is the single
+home for runtime-adjustable settings and debug controls — things you'd
+otherwise need to SSH in and either edit `.env` + restart, or poke at with
+`curl`, for. Every control there is backed by a real endpoint, not a fake
+toggle:
+
+- **Audio** — the SFX On/Off toggle (moved here from the Session panel) and
+  three "test sound" buttons that hit `POST /api/sfx/test {event}` to fire a
+  sound immediately, without needing a real chat turn to happen to try one.
+- **Browser** — a mode override (`POST /api/browser/mode`) that beats
+  `BROWSER_MODE` from `.env` at runtime (`setModeOverride` in
+  `tools/browser.ts`), plus a Restart button (`POST /api/browser/restart` →
+  `closeBrowser()`) so the override actually takes effect immediately rather
+  than waiting for whatever tool call next happens to relaunch the browser.
+- **Self-Update** — poll interval, adjustable the same way the browser
+  stream interval is (`setUpdateInterval` in `update.ts`, clears and
+  re-arms the timer rather than needing a restart), and a Check Now button
+  (`POST /api/update/check-now` → `checkNow()`, sharing `checkOnce()` with
+  the scheduled poll via a `checking` guard so the two can't race).
+- **Memory** — a live summary of what Caden currently remembers
+  (`GET /api/memory`) and a Forget Me button (`POST /api/memory/forget` →
+  `forgetMemory()` in `tools/memory.ts`) that resets it to first-contact —
+  useful both for actually asking to be forgotten and for testing the
+  greeting flow without editing `~/.caden/memory.json` by hand.
+- **Raw Status** — a collapsible `<pre>` of the live `/api/status` payload,
+  for whenever the summarized panels aren't enough.
+
+If you add another runtime-adjustable setting anywhere in the app, this is
+where it belongs — don't invent a second settings surface.
+
 ## Accuracy discipline
 
 A `web_search` snippet is a lead, not a fact — this bit Caden for real once:

@@ -30,6 +30,19 @@ let mode: Mode | null = null;
 let streamTimer: NodeJS.Timeout | null = null;
 let streamViewers = 0;
 let streamIntervalMs = clampInterval(Number(process.env.BROWSER_STREAM_INTERVAL_MS) || 700);
+// Debug override for BROWSER_MODE, settable at runtime from the Options
+// panel — takes effect on the next launch, so paired with closeBrowser() to
+// force that immediately rather than waiting for whatever tool call happens
+// to open a fresh page next.
+let modeOverride: Mode | null = null;
+
+export function setModeOverride(value: string | null) {
+  modeOverride = value === "local" || value === "stream" ? value : null;
+  return modeOverride ?? "auto";
+}
+export function getModeOverride(): string {
+  return modeOverride ?? "auto";
+}
 
 function clampInterval(ms: number): number {
   if (!Number.isFinite(ms)) return 700;
@@ -45,6 +58,7 @@ export function getStreamInterval(): number {
 }
 
 function resolveMode(): Mode {
+  if (modeOverride) return modeOverride;
   const configured = (process.env.BROWSER_MODE || "auto").toLowerCase();
   if (configured === "local" || configured === "stream") return configured;
   return process.env.DISPLAY ? "local" : "stream";
@@ -60,7 +74,7 @@ async function ensureBrowser(): Promise<Page> {
 }
 
 export function browserStatus() {
-  return { mode, open: !!page, streaming: streamViewers > 0, stream_interval_ms: streamIntervalMs };
+  return { mode, mode_override: modeOverride ?? "auto", open: !!page, streaming: streamViewers > 0, stream_interval_ms: streamIntervalMs };
 }
 
 // server.ts calls these as WS clients connect/disconnect from /ws/browser,
@@ -165,7 +179,12 @@ async function browserScreenshot() {
   return { image_base64: buf.toString("base64"), mime: "image/jpeg" };
 }
 
-async function browserClose() {
+// Exported standalone (not just the browser_close tool handler) so the
+// Options panel's "Restart Browser" control can force a fresh launch —
+// mode changes only take effect on the next chromium.launch() call, and a
+// debug control that says "restart" should mean it right away, not "next
+// time some tool call happens to open a page."
+export async function closeBrowser() {
   if (page) await page.close().catch(() => {});
   if (browser) await browser.close().catch(() => {});
   page = null; browser = null; mode = null;
@@ -216,6 +235,6 @@ export const browserTools: ToolDef[] = [
   },
   {
     schema: schema("browser_close", "Close the browser.", {}),
-    handler: async () => browserClose(),
+    handler: async () => closeBrowser(),
   },
 ];

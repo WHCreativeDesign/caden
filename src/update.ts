@@ -7,14 +7,30 @@ import { promisify } from "node:util";
 const run = promisify(execFile);
 
 const BRANCH = process.env.UPDATE_BRANCH || "main";
-const INTERVAL_MS = Number(process.env.UPDATE_INTERVAL_MS) || 3 * 60_000;
 const REPO_DIR = process.cwd();
 
+let intervalMs = clampInterval(Number(process.env.UPDATE_INTERVAL_MS) || 3 * 60_000);
+let timer: NodeJS.Timeout | null = null;
+let checking = false;
 let lastChecked: string | null = null;
 let currentSha = "unknown";
 
+function clampInterval(ms: number): number {
+  if (!Number.isFinite(ms)) return 3 * 60_000;
+  return Math.max(15_000, Math.min(60 * 60_000, Math.round(ms)));
+}
+
 export function updateStatus() {
-  return { branch: BRANCH, sha: currentSha, last_checked: lastChecked, interval_ms: INTERVAL_MS };
+  return { branch: BRANCH, sha: currentSha, last_checked: lastChecked, interval_ms: intervalMs };
+}
+
+// Settable from the Options panel — takes effect on the next tick rather
+// than requiring a restart, same self-rescheduling-timer trick used for the
+// browser stream interval.
+export function setUpdateInterval(ms: number): number {
+  intervalMs = clampInterval(ms);
+  if (timer) { clearInterval(timer); timer = setInterval(checkOnce, intervalMs); }
+  return intervalMs;
 }
 
 async function readSha(): Promise<string> {
@@ -27,6 +43,8 @@ async function readSha(): Promise<string> {
 }
 
 async function checkOnce(): Promise<void> {
+  if (checking) return;
+  checking = true;
   lastChecked = new Date().toISOString();
   try {
     await run("git", ["fetch", "origin", BRANCH], { cwd: REPO_DIR, timeout: 30_000 });
@@ -43,10 +61,20 @@ async function checkOnce(): Promise<void> {
     process.exit(0);
   } catch (err) {
     console.error("[update] check failed:", (err as Error).message ?? err);
+  } finally {
+    checking = false;
   }
+}
+
+// The Options panel's "Check Now" button — forces an immediate check
+// instead of waiting for the next tick. Shares checkOnce with the poll loop
+// (guarded by `checking`) so a manual click can't race a scheduled one.
+export async function checkNow(): Promise<ReturnType<typeof updateStatus>> {
+  await checkOnce();
+  return updateStatus();
 }
 
 export async function startUpdateWatcher() {
   currentSha = await readSha();
-  setInterval(checkOnce, INTERVAL_MS);
+  timer = setInterval(checkOnce, intervalMs);
 }

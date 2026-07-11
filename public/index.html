@@ -254,6 +254,23 @@
   .browser-scroll { flex: 1; overflow: auto; padding: 12px; display: flex; align-items: flex-start; justify-content: center; min-height: 0; }
   .browser-scroll img { max-width: 100%; border: 1px solid var(--border); }
 
+  /* Options / debug panel */
+  .options-scroll { flex: 1; overflow-y: auto; padding: 16px; min-height: 0; }
+  .opt-section { max-width: 640px; margin: 0 auto 22px; }
+  .opt-section:last-child { margin-bottom: 0; }
+  .opt-title { color: var(--amber); font-size: 11px; font-weight: 700; letter-spacing: 0.18em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .opt-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 0; font-size: 12px; letter-spacing: 0.06em; }
+  .opt-row .k { color: var(--dim); }
+  .opt-row .k small { display: block; color: var(--faint); font-size: 10px; letter-spacing: 0.06em; margin-top: 2px; }
+  .opt-row .ctl { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  .opt-row .ctl .btn, .opt-row .ctl .sel { font-size: 11px; padding: 6px 12px; }
+  .opt-row .ctl select.sel { width: auto; }
+  .opt-note { color: var(--faint); font-size: 11px; margin-top: 6px; letter-spacing: 0.06em; }
+  .opt-pre {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--dim);
+    font-size: 10.5px; padding: 10px; margin-top: 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  }
+
   /* ── Footer ─────────────────────────────────────────────────────────── */
   .footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 10.5px; letter-spacing: 0.16em; color: var(--faint); }
 </style>
@@ -284,6 +301,7 @@
     <button class="tab on" id="tabChat"><span class="sq"></span>CHAT</button>
     <button class="tab" id="tabSystem"><span class="sq"></span>SYSTEM</button>
     <button class="tab" id="tabBrowser"><span class="sq"></span>BROWSER</button>
+    <button class="tab" id="tabOptions"><span class="sq"></span>OPTIONS</button>
   </nav>
 
   <section class="main">
@@ -298,9 +316,6 @@
               <option value="scout">Scout</option>
             </select>
             <button class="btn" id="newBtn">New</button>
-          </div>
-          <div class="session-row" style="margin-top:8px;">
-            <button class="btn" id="sfxBtn" style="flex:1;" aria-pressed="true">SFX On</button>
           </div>
         </div>
       </div>
@@ -375,6 +390,82 @@
           <div class="browser-note up">Live view connects when this tab is open — streams whatever the browser is doing, whether it's on the Pi's screen or headless</div>
         </div>
       </div>
+
+      <!-- OPTIONS -->
+      <div class="panel view hidden" id="viewOptions">
+        <div class="panel-head">OPTIONS <span class="meta up">Configuration &amp; Debug</span></div>
+        <div class="options-scroll">
+          <div class="opt-section">
+            <div class="opt-title up">Audio</div>
+            <div class="opt-row">
+              <span class="k">Status SFX</span>
+              <span class="ctl"><button class="btn" id="optSfxBtn">On</button></span>
+            </div>
+            <div class="opt-row">
+              <span class="k">Test a sound<small>Plays locally right now, no chat turn needed</small></span>
+              <span class="ctl">
+                <button class="btn" data-sfx-test="sent">Sent</button>
+                <button class="btn" data-sfx-test="success">Success</button>
+                <button class="btn" data-sfx-test="error">Error</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="opt-section">
+            <div class="opt-title up">Browser</div>
+            <div class="opt-row">
+              <span class="k">Mode override<small>Takes effect on next launch — use Restart to force it now</small></span>
+              <span class="ctl">
+                <select class="sel" id="optBrowserMode">
+                  <option value="auto">Auto</option>
+                  <option value="local">Local</option>
+                  <option value="stream">Stream</option>
+                </select>
+              </span>
+            </div>
+            <div class="opt-row">
+              <span class="k">Restart browser<small>Closes the current instance; relaunches on next use</small></span>
+              <span class="ctl"><button class="btn" id="optBrowserRestart">Restart</button></span>
+            </div>
+          </div>
+
+          <div class="opt-section">
+            <div class="opt-title up">Self-Update</div>
+            <div class="opt-row">
+              <span class="k">Poll interval</span>
+              <span class="ctl">
+                <select class="sel" id="optUpdateInterval">
+                  <option value="30000">30s</option>
+                  <option value="60000">1m</option>
+                  <option value="180000" selected>3m</option>
+                  <option value="600000">10m</option>
+                  <option value="1800000">30m</option>
+                </select>
+              </span>
+            </div>
+            <div class="opt-row">
+              <span class="k">Check now<small id="optUpdateMeta">—</small></span>
+              <span class="ctl"><button class="btn" id="optCheckNow">Check Now</button></span>
+            </div>
+          </div>
+
+          <div class="opt-section">
+            <div class="opt-title up">Memory</div>
+            <div class="opt-row">
+              <span class="k">What Caden remembers<small id="optMemorySummary">—</small></span>
+              <span class="ctl"><button class="btn" id="optForget">Forget Me</button></span>
+            </div>
+          </div>
+
+          <div class="opt-section">
+            <div class="opt-title up">Raw Status</div>
+            <details>
+              <summary style="cursor:pointer; color: var(--dim); font-size:11px; letter-spacing:0.1em;">/api/status</summary>
+              <pre class="opt-pre" id="optRawStatus">—</pre>
+            </details>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -390,14 +481,16 @@
   const agentSelect = $('agentSelect'), newBtn = $('newBtn'), convMeta = $('convMeta');
   const inputField = $('inputField'), sendBtn = $('sendBtn');
   const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachRow = $('attachRow');
-  const tabChat = $('tabChat'), tabSystem = $('tabSystem'), tabBrowser = $('tabBrowser');
-  const viewChat = $('viewChat'), viewSystem = $('viewSystem'), viewBrowser = $('viewBrowser');
+  const tabChat = $('tabChat'), tabSystem = $('tabSystem'), tabBrowser = $('tabBrowser'), tabOptions = $('tabOptions');
+  const viewChat = $('viewChat'), viewSystem = $('viewSystem'), viewBrowser = $('viewBrowser'), viewOptions = $('viewOptions');
   const logBody = $('logBody'), logEmpty = $('logEmpty'), browserView = $('browserView'), browserMeta = $('browserMeta');
   const intervalSelect = $('intervalSelect');
   const linkDot = $('linkDot'), linkText = $('linkText'), sysText = $('sysText');
   const keySeg = $('keySeg');
   const tMainframe = $('tMainframe'), tSha = $('tSha'), tUptime = $('tUptime'), tGroq = $('tGroq'), tGemini = $('tGemini'), tBrowser = $('tBrowser'), tClock = $('tClock');
-  const sfxBtn = $('sfxBtn');
+  const optSfxBtn = $('optSfxBtn'), optBrowserMode = $('optBrowserMode'), optBrowserRestart = $('optBrowserRestart');
+  const optUpdateInterval = $('optUpdateInterval'), optCheckNow = $('optCheckNow'), optUpdateMeta = $('optUpdateMeta');
+  const optMemorySummary = $('optMemorySummary'), optForget = $('optForget'), optRawStatus = $('optRawStatus');
 
   const STORAGE_KEY = 'caden.session.v2';
   const AGENT_LABELS = { caden: 'Caden', researcher: 'Research', scout: 'Scout' };
@@ -653,14 +746,18 @@
     tabChat.classList.toggle('on', which === 'chat');
     tabSystem.classList.toggle('on', which === 'system');
     tabBrowser.classList.toggle('on', which === 'browser');
+    tabOptions.classList.toggle('on', which === 'options');
     viewChat.classList.toggle('hidden', which !== 'chat');
     viewSystem.classList.toggle('hidden', which !== 'system');
     viewBrowser.classList.toggle('hidden', which !== 'browser');
+    viewOptions.classList.toggle('hidden', which !== 'options');
     if (which === 'browser') connectBrowserWs(); else disconnectBrowserWs();
+    if (which === 'options') refreshOptions();
   }
   tabChat.addEventListener('click', () => switchTab('chat'));
   tabSystem.addEventListener('click', () => switchTab('system'));
   tabBrowser.addEventListener('click', () => switchTab('browser'));
+  tabOptions.addEventListener('click', () => switchTab('options'));
 
   function wsUrl(path) { return (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + path; }
 
@@ -723,12 +820,12 @@
   const sfxBuffers = {};
 
   function setSfxBtn() {
-    sfxBtn.textContent = sfxEnabled ? 'SFX On' : 'SFX Off';
-    sfxBtn.setAttribute('aria-pressed', String(sfxEnabled));
-    sfxBtn.style.opacity = sfxEnabled ? '1' : '0.55';
+    optSfxBtn.textContent = sfxEnabled ? 'SFX On' : 'SFX Off';
+    optSfxBtn.setAttribute('aria-pressed', String(sfxEnabled));
+    optSfxBtn.style.opacity = sfxEnabled ? '1' : '0.55';
   }
   setSfxBtn();
-  sfxBtn.addEventListener('click', () => {
+  optSfxBtn.addEventListener('click', () => {
     sfxEnabled = !sfxEnabled;
     try { localStorage.setItem('caden.sfx', sfxEnabled ? 'on' : 'off'); } catch {}
     setSfxBtn();
@@ -744,9 +841,20 @@
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   }
   // Browsers require a real user gesture before audio can play — the send
-  // button click is exactly that, so unlock (and start preloading) there.
+  // button click (or an Options test-sound click) is exactly that, so
+  // unlock (and start preloading) there.
   sendBtn.addEventListener('click', ensureAudioCtx, { once: true });
   inputField.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) ensureAudioCtx(); }, { once: true });
+
+  document.querySelectorAll('[data-sfx-test]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      ensureAudioCtx();
+      fetch('/api/sfx/test', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: btn.dataset.sfxTest }),
+      }).catch(() => {});
+    });
+  });
 
   function playSfxAt(name, playAtMs) {
     if (!sfxEnabled || !audioCtx || !sfxBuffers[name]) return;
@@ -766,6 +874,61 @@
     };
     sfxWs.onclose = () => setTimeout(connectSfxWs, 3000);
     sfxWs.onerror = () => sfxWs.close();
+  }
+
+  // ── Options / debug panel ────────────────────────────────────────────────
+  optBrowserMode.addEventListener('change', () => {
+    fetch('/api/browser/mode', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: optBrowserMode.value }),
+    }).catch(() => {});
+  });
+
+  optBrowserRestart.addEventListener('click', async () => {
+    optBrowserRestart.disabled = true;
+    try { await fetch('/api/browser/restart', { method: 'POST' }); } catch {}
+    optBrowserRestart.disabled = false;
+    refreshOptions();
+  });
+
+  optUpdateInterval.addEventListener('change', () => {
+    fetch('/api/update/interval', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval_ms: Number(optUpdateInterval.value) }),
+    }).catch(() => {});
+  });
+
+  optCheckNow.addEventListener('click', async () => {
+    optCheckNow.disabled = true; optCheckNow.textContent = 'Checking…';
+    try { await fetch('/api/update/check-now', { method: 'POST' }); } catch {}
+    optCheckNow.disabled = false; optCheckNow.textContent = 'Check Now';
+    refreshOptions();
+  });
+
+  optForget.addEventListener('click', async () => {
+    optForget.disabled = true;
+    try { await fetch('/api/memory/forget', { method: 'POST' }); } catch {}
+    optForget.disabled = false;
+    refreshOptions();
+  });
+
+  async function refreshOptions() {
+    try {
+      const status = await (await fetch('/api/status')).json();
+      optRawStatus.textContent = JSON.stringify(status, null, 2);
+      if (document.activeElement !== optBrowserMode) optBrowserMode.value = status.browser?.mode_override || 'auto';
+      if (document.activeElement !== optUpdateInterval) {
+        const val = String(status.update?.interval_ms ?? '');
+        if ([...optUpdateInterval.options].some((o) => o.value === val)) optUpdateInterval.value = val;
+      }
+      optUpdateMeta.textContent = status.update?.last_checked ? 'Last checked ' + new Date(status.update.last_checked).toLocaleTimeString('en-GB', { hour12: false }) : 'Not checked yet this session';
+    } catch {}
+    try {
+      const mem = await (await fetch('/api/memory')).json();
+      optMemorySummary.textContent = mem.user_name
+        ? 'Knows you as ' + mem.user_name + ' · ' + (mem.notes?.length || 0) + ' note' + (mem.notes?.length === 1 ? '' : 's')
+        : 'First contact — no name or notes saved yet';
+    } catch {}
   }
 
   // ── Telemetry ─────────────────────────────────────────────────────────────
