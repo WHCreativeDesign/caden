@@ -6,9 +6,14 @@ import { ToolSchema } from "./types.js";
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GEMINI_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 
-const MODELS: Record<string, { groq: string; gemini: string }> = {
-  orchestrator: { groq: "llama-3.3-70b-versatile", gemini: "gemini-2.0-flash" },
-  fast: { groq: "llama-3.1-8b-instant", gemini: "gemini-2.0-flash" },
+// groqVision is a separate model id because Groq's everyday tool-calling
+// models (llama-3.3-70b-versatile etc.) don't take image input at all — but
+// Groq does host natively multimodal models that also support tool calling,
+// so vision isn't Gemini-only; it's just a different model on the same
+// provider, tried first same as text.
+const MODELS: Record<string, { groq: string; groqVision: string; gemini: string }> = {
+  orchestrator: { groq: "llama-3.3-70b-versatile", groqVision: "meta-llama/llama-4-scout-17b-16e-instruct", gemini: "gemini-2.0-flash" },
+  fast: { groq: "llama-3.1-8b-instant", groqVision: "meta-llama/llama-4-scout-17b-16e-instruct", gemini: "gemini-2.0-flash" },
 };
 const DEFAULT_PROFILE = "orchestrator";
 const MAX_KEY_ATTEMPTS = 5;
@@ -138,10 +143,8 @@ async function callProvider(provider: "groq" | "gemini", model: string, messages
 
 // True if any message carries a multimodal image part (an uploaded photo, or
 // a screenshot forwarded by the agent loop after a screenshot_desktop /
-// browser_screenshot call). Groq's tool-calling text models can't see these;
-// Gemini's OpenAI-compatible endpoint handles image input and function
-// calling together natively, so vision always goes straight there rather
-// than wasting a doomed Groq attempt first.
+// browser_screenshot call). This just picks which model id to call with —
+// both providers are still tried, same primary/fallback order as plain text.
 function hasImageContent(messages: unknown[]): boolean {
   return messages.some(
     (m: any) => Array.isArray(m?.content) && m.content.some((p: any) => p?.type === "image_url"),
@@ -150,15 +153,9 @@ function hasImageContent(messages: unknown[]): boolean {
 
 export async function llm(messages: unknown[], profile: string, tools?: ToolSchema[]) {
   const models = MODELS[profile] ?? MODELS[DEFAULT_PROFILE];
-  if (hasImageContent(messages)) {
-    try {
-      return await callProvider("gemini", models.gemini, messages, tools);
-    } catch (geminiErr) {
-      throw new Error(`Vision needs a working Gemini key (image input isn't supported on the Groq models here): ${String(geminiErr)}`);
-    }
-  }
+  const groqModel = hasImageContent(messages) ? models.groqVision : models.groq;
   try {
-    return await callProvider("groq", models.groq, messages, tools);
+    return await callProvider("groq", groqModel, messages, tools);
   } catch (groqErr) {
     try {
       return await callProvider("gemini", models.gemini, messages, tools);

@@ -211,14 +211,13 @@ follow-up `user` message with an `image_url` part, so the model genuinely
 sees it on its next turn. `IMAGE_RESULT_TOOLS` in `agent.ts` is the set of
 tool names this applies to (`screenshot_desktop`, `browser_screenshot`).
 
-Groq's tool-calling models here don't reliably support image input, so
-`providers.ts`'s `llm()` detects any `image_url` content part in the message
-list and routes straight to Gemini (skipping the Groq attempt entirely) —
-Gemini's OpenAI-compatible endpoint handles multimodal input and function
-calling together natively. This means vision requires a working
-`GEMINI_API_KEYS` entry; if there isn't one, `llm()` throws a clear error
-saying so rather than silently falling back to a model that can't see the
-image at all.
+Groq's everyday tool-calling models (`llama-3.3-70b-versatile` etc.) don't
+take image input at all, but Groq also hosts natively multimodal models that
+still support tool calling — so vision isn't Gemini-only. `providers.ts`'s
+`MODELS` map has a separate `groqVision` id per profile
+(`meta-llama/llama-4-scout-17b-16e-instruct`); `llm()` detects an `image_url`
+content part and swaps to that model id, but the provider order is unchanged
+— Groq first, Gemini as fallback if Groq fails, exactly like plain text.
 
 ## Key management
 
