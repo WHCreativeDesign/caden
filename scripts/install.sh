@@ -100,6 +100,24 @@ run_step "Installing screen-capture tools (grim, scrot)" bash -c "${SUDO} apt-ge
 # paplay is the fallback for setups running a sound server instead.
 run_step "Installing audio playback tools (alsa-utils, pulseaudio-utils)" bash -c "${SUDO} apt-get install -y alsa-utils pulseaudio-utils"
 
+# aplay/paplay need /dev/snd/* access, which on Raspberry Pi OS means being
+# in the `audio` group — without it, playback fails with a permission error
+# that's easy to mistake for "no sound hardware at all."
+if command -v getent >/dev/null 2>&1 && ! id -nG "$CURRENT_USER" 2>/dev/null | grep -qw audio; then
+  run_step "Adding ${CURRENT_USER} to the audio group" ${SUDO} usermod -aG audio "$CURRENT_USER"
+  note "Group membership needs a fresh login to take effect — the systemd service picks it up on its next (re)start, done further down."
+fi
+
+# Print what ALSA can actually see so a silent headphone jack is at least
+# diagnosable from this output, rather than a mystery after the fact.
+echo ""
+say "Audio devices detected (aplay -l)"
+aplay -l 2>&1 | sed 's/^/  /' || note "aplay -l failed — is a sound card present?"
+note "If this doesn't list the analog/headphone output, or sound comes out"
+note "the wrong place (e.g. HDMI instead of the jack), force it with:"
+note "  sudo raspi-config  →  System Options  →  Audio  →  Headphones"
+note "or set SFX_AUDIO_DEVICE=plughw:<card>,<device> in .env (see .env.example)."
+
 run_step "Building" npm run build
 
 # ── API keys — interactive, over /dev/tty so this works via curl | bash ──

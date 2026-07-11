@@ -303,9 +303,33 @@ for "as close as achievable," not "first one to hear about it wins."
 
 Requires `aplay` (alsa-utils) or `paplay` (pulseaudio-utils) on the Pi —
 `install.sh` installs both. The web UI has an SFX On/Off toggle
-(`localStorage`-persisted) in the SESSION panel; audio only starts once
+(`localStorage`-persisted) in the Options tab; audio only starts once
 unlocked by a genuine user gesture (the Send button / Enter key), per
 browser autoplay policy.
+
+**Troubleshooting no sound from the Pi's speaker/headphone jack.**
+`playLocal()` in `sfx.ts` used to swallow every failure silently — total
+diagnostic dead end. It now logs the real `aplay`/`paplay` stderr to both
+the journal (`journalctl -u caden -f`) and the live SYSTEM LOG panel
+(reusing `run_shell`'s `auditEvents` channel), so a failure is visible
+immediately from the Options tab's "test sound" buttons. Common causes,
+roughly in likelihood order:
+1. **Wrong output routed** — the Pi's onboard audio can default to HDMI
+   even with headphones in the 3.5mm jack. Force it with
+   `sudo raspi-config` → System Options → Audio → Headphones, or set
+   `SFX_AUDIO_DEVICE=plughw:<card>,<device>` in `.env` (find the right
+   card/device with `aplay -l`, which `install.sh` also prints during setup).
+2. **User not in the `audio` group** — `aplay`/`paplay` need `/dev/snd/*`
+   access; `install.sh` checks for and adds this, but existing installs
+   need a fresh login (or systemd restart) to pick it up.
+3. **Muted or zero volume** — `amixer sset Master unmute` /
+   `amixer sset Master 100%` (control name varies; `amixer scontrols` lists
+   what's available).
+4. **paplay's `XDG_RUNTIME_DIR` is unset** — a systemd service isn't part of
+   a graphical login session, so PulseAudio's user socket path isn't handed
+   to it for free. `playLocal()` best-guesses `/run/user/<uid>` for the
+   paplay fallback specifically for this reason; if that guess is wrong for
+   your setup, set `XDG_RUNTIME_DIR` in the systemd unit's `Environment=`.
 
 ## Key management
 

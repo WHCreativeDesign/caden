@@ -17,6 +17,7 @@ import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { auditEvents } from "./tools/shell.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SFX_DIR = join(__dirname, "..", "public", "sfx");
@@ -37,12 +38,42 @@ const LOOKAHEAD_MS = 150;
 
 export const sfxEvents = new EventEmitter();
 
+// Failures here used to be swallowed completely — which meant "no sound
+// from the headphone jack" had zero diagnosability short of SSHing in and
+// guessing. Now a total failure (both aplay and paplay) logs the real
+// stderr to both the journal AND the live SYSTEM LOG panel (auditEvents,
+// the same channel run_shell uses), so it shows up immediately from the
+// Options tab's "test sound" buttons without needing a terminal.
 function playLocal(file: string) {
   if (!existsSync(file)) return;
-  // aplay (ALSA) is the near-universal default on Raspberry Pi OS; paplay
-  // (PulseAudio) as a fallback for setups running a sound server instead.
-  execFile("aplay", ["-q", file], (err) => {
-    if (err) execFile("paplay", [file], () => { /* no audio output reachable, skip */ });
+  // SFX_AUDIO_DEVICE lets you force a specific ALSA device (e.g.
+  // "plughw:0,0" for the Pi's onboard analog jack) when the system default
+  // routes elsewhere (HDMI is a common default even with headphones
+  // plugged in) — see CLAUDE.md's SFX troubleshooting section.
+  const device = process.env.SFX_AUDIO_DEVICE;
+  const aplayArgs = device ? ["-q", "-D", device, file] : ["-q", file];
+  execFile("aplay", aplayArgs, (aplayErr, _out, aplayStderr) => {
+    if (!aplayErr) return;
+    // paplay needs a reachable PulseAudio user socket — which a systemd
+    // service doesn't get for free, since it isn't part of a graphical
+    // login session and so has no XDG_RUNTIME_DIR set. Best-guess the
+    // standard path (/run/user/<uid>) rather than letting this fallback be
+    // dead on arrival for every systemd-run install.
+    const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
+    const env = { ...process.env, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || (uid !== undefined ? `/run/user/${uid}` : "") };
+    execFile("paplay", [file], { env }, (paErr, _po, paStderr) => {
+      if (!paErr) return;
+      const detail = [String(aplayStderr || aplayErr.message || "").trim(), String(paStderr || paErr.message || "").trim()]
+        .filter(Boolean).join(" | ") || "no audio output reachable";
+      console.error(`[sfx] playback failed for ${file}: ${detail}`);
+      auditEvents.emit("entry", {
+        ts: new Date().toISOString(),
+        command: `sfx: play ${file}`,
+        cwd: SFX_DIR,
+        status: "error",
+        output: detail.slice(0, 500),
+      });
+    });
   });
 }
 
