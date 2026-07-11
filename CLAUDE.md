@@ -215,9 +215,16 @@ Groq's everyday tool-calling models (`llama-3.3-70b-versatile` etc.) don't
 take image input at all, but Groq also hosts natively multimodal models that
 still support tool calling — so vision isn't Gemini-only. `providers.ts`'s
 `MODELS` map has a separate `groqVision` id per profile
-(`meta-llama/llama-4-scout-17b-16e-instruct`); `llm()` detects an `image_url`
-content part and swaps to that model id, but the provider order is unchanged
-— Groq first, Gemini as fallback if Groq fails, exactly like plain text.
+(`qwen/qwen3.6-27b`, currently the only vision+tool-calling model Groq
+serves — a preview model, not GA); `llm()` detects an `image_url` content
+part and swaps to that model id, but the provider order is unchanged — Groq
+first, Gemini as fallback if Groq fails, exactly like plain text. The prior
+pick (`meta-llama/llama-4-scout-17b-16e-instruct`) was deprecated by Groq
+mid-2026, which silently broke image recognition (the model kept responding,
+just without seeing the image) rather than erroring loudly — Groq rotates
+its vision lineup often enough that this is worth a second look via
+https://console.groq.com/docs/vision if attached images stop being "seen"
+again.
 
 ## Version ("mainframe version")
 

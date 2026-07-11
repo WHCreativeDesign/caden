@@ -11,9 +11,19 @@ const GEMINI_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai
 // Groq does host natively multimodal models that also support tool calling,
 // so vision isn't Gemini-only; it's just a different model on the same
 // provider, tried first same as text.
+//
+// qwen/qwen3.6-27b is Groq's currently-supported vision+tool-calling model
+// (a preview model, not GA — it's the only one Groq offers right now).
+// The prior pick, meta-llama/llama-4-scout-17b-16e-instruct, was deprecated
+// by Groq on 2026-06-17 — this is exactly why an attached image silently
+// went unseen (the model call itself failed/degraded, not the plumbing
+// carrying the image to it). Since Groq rotates its vision lineup
+// frequently, if this one goes the same way check
+// https://console.groq.com/docs/vision for the current replacement rather
+// than assuming the plumbing broke again.
 const MODELS: Record<string, { groq: string; groqVision: string; gemini: string }> = {
-  orchestrator: { groq: "llama-3.3-70b-versatile", groqVision: "meta-llama/llama-4-scout-17b-16e-instruct", gemini: "gemini-2.0-flash" },
-  fast: { groq: "llama-3.1-8b-instant", groqVision: "meta-llama/llama-4-scout-17b-16e-instruct", gemini: "gemini-2.0-flash" },
+  orchestrator: { groq: "llama-3.3-70b-versatile", groqVision: "qwen/qwen3.6-27b", gemini: "gemini-2.0-flash" },
+  fast: { groq: "llama-3.1-8b-instant", groqVision: "qwen/qwen3.6-27b", gemini: "gemini-2.0-flash" },
 };
 const DEFAULT_PROFILE = "orchestrator";
 const MAX_KEY_ATTEMPTS = 5;
