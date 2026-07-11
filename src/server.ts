@@ -9,7 +9,7 @@ import { auditEvents } from "./tools/shell.js";
 import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval, setModeOverride, closeBrowser } from "./tools/browser.js";
 import { updateStatus, setUpdateInterval, checkNow } from "./update.js";
 import { MAINFRAME_VERSION } from "./version.js";
-import { sfxEvents, triggerSfx, SfxEvent } from "./sfx.js";
+import { sfxEvents, triggerSfx, sfxStatus, SfxEvent } from "./sfx.js";
 import { loadMemory, forgetMemory } from "./tools/memory.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +32,7 @@ export function startServer() {
       update: updateStatus(),
       browser: browserStatus(),
       providers: providerStatus(),
+      sfx: sfxStatus(),
     });
   });
 

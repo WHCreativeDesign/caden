@@ -14,7 +14,7 @@
 // physically achievable," not "whichever gets the message first."
 import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { auditEvents } from "./tools/shell.js";
@@ -31,10 +31,72 @@ const SFX_FILES: Record<SfxEvent, string> = {
 };
 
 // How far ahead of "now" a scheduled play-time is set. Needs to comfortably
-// cover: the WS hop to the browser, and the browser's own scheduling call —
-// too short and slower clients miss the window and just play late; too long
-// and it starts feeling laggy. 150ms is a reasonable middle ground on a LAN.
-const LOOKAHEAD_MS = 150;
+// cover: the WS hop to the browser, the browser's own scheduling call, AND
+// (below) enough headroom to compensate for the Pi's local playback
+// overhead — too short and slower clients/compensation miss the window and
+// just play late; too long and it starts feeling laggy.
+const LOOKAHEAD_MS = 220;
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+// Read each clip's real duration from its own WAV header rather than
+// hardcoding it, so this stays correct if gen-sfx.mjs is ever changed to
+// produce different-length sounds.
+function wavDurationMs(filePath: string): number {
+  try {
+    const buf = readFileSync(filePath);
+    const sampleRate = buf.readUInt32LE(24);
+    const channels = buf.readUInt16LE(22);
+    const bitsPerSample = buf.readUInt16LE(34);
+    const dataSize = buf.readUInt32LE(40);
+    const bytesPerFrame = channels * (bitsPerSample / 8);
+    return (dataSize / bytesPerFrame / sampleRate) * 1000;
+  } catch {
+    return 300; // safe fallback guess if the file is missing/unreadable
+  }
+}
+const SFX_DURATIONS_MS: Record<SfxEvent, number> = {
+  sent: wavDurationMs(SFX_FILES.sent),
+  success: wavDurationMs(SFX_FILES.success),
+  error: wavDurationMs(SFX_FILES.error),
+};
+
+// The gap the user actually noticed: playAt is exact, but spawning `aplay`
+// (fork+exec, dynamic-linking libasound, negotiating and opening the ALSA
+// device) takes real, non-zero time — so audible sound lands measurably
+// *after* the scheduled instant even though the timer fired right on time.
+// The browser's Web Audio path doesn't have this problem (the AudioContext
+// is already open, start(when) is sample-accurate), so left uncompensated
+// the Pi visibly trails the browser.
+//
+// Fix: fire the local exec call *earlier* than playAt by however long that
+// overhead actually is, so the ALSA device finishes opening and starts
+// producing sound right as playAt arrives — same idea as a stage performer
+// counting themselves in early to land on the beat. Since that overhead is
+// hardware/load-dependent and can't be known in advance, it's measured live
+// (wall-clock time of each real aplay call, minus that clip's own known
+// duration = pure startup overhead) and smoothed with an EMA, so it adapts
+// to this specific Pi rather than a guessed constant. SFX_LOCAL_LATENCY_MS
+// overrides this with a fixed value if auto-calibration isn't trusted.
+const explicitLatencyEnv = process.env.SFX_LOCAL_LATENCY_MS;
+const hasExplicitLatency = explicitLatencyEnv !== undefined && explicitLatencyEnv !== "" && Number.isFinite(Number(explicitLatencyEnv));
+const MAX_COMPENSATION_MS = LOOKAHEAD_MS - 40; // always leave real scheduling margin
+let calibratedLatencyMs = 60; // reasonable starting guess until real samples refine it
+
+function currentLocalLatencyMs(): number {
+  if (hasExplicitLatency) return clamp(Number(explicitLatencyEnv), 0, MAX_COMPENSATION_MS);
+  return clamp(calibratedLatencyMs, 0, MAX_COMPENSATION_MS);
+}
+
+export function sfxStatus() {
+  return {
+    lookahead_ms: LOOKAHEAD_MS,
+    local_latency_ms: Math.round(currentLocalLatencyMs()),
+    local_latency_source: hasExplicitLatency ? "env override" : "auto-calibrated",
+  };
+}
 
 export const sfxEvents = new EventEmitter();
 
@@ -44,16 +106,33 @@ export const sfxEvents = new EventEmitter();
 // stderr to both the journal AND the live SYSTEM LOG panel (auditEvents,
 // the same channel run_shell uses), so it shows up immediately from the
 // Options tab's "test sound" buttons without needing a terminal.
-function playLocal(file: string) {
+function playLocal(event: SfxEvent) {
+  const file = SFX_FILES[event];
   if (!existsSync(file)) return;
   // SFX_AUDIO_DEVICE lets you force a specific ALSA device (e.g.
   // "plughw:0,0" for the Pi's onboard analog jack) when the system default
   // routes elsewhere (HDMI is a common default even with headphones
   // plugged in) — see CLAUDE.md's SFX troubleshooting section.
+  //
+  // --buffer-time/--period-time (microseconds) trim ALSA's own default
+  // buffering, which otherwise adds its own chunk of latency on top of the
+  // spawn overhead above — 80ms/20ms is conservative enough not to risk
+  // underruns on a loaded Pi while still being tighter than most drivers'
+  // defaults.
   const device = process.env.SFX_AUDIO_DEVICE;
-  const aplayArgs = device ? ["-q", "-D", device, file] : ["-q", file];
+  const tuning = ["--buffer-time", "80000", "--period-time", "20000"];
+  const aplayArgs = device ? ["-q", "-D", device, ...tuning, file] : ["-q", ...tuning, file];
+
+  const spawnedAt = Date.now();
   execFile("aplay", aplayArgs, (aplayErr, _out, aplayStderr) => {
-    if (!aplayErr) return;
+    if (!aplayErr) {
+      if (!hasExplicitLatency) {
+        const wallMs = Date.now() - spawnedAt;
+        const overhead = clamp(wallMs - SFX_DURATIONS_MS[event], 0, 400);
+        calibratedLatencyMs = calibratedLatencyMs * 0.6 + overhead * 0.4;
+      }
+      return;
+    }
     // paplay needs a reachable PulseAudio user socket — which a systemd
     // service doesn't get for free, since it isn't part of a graphical
     // login session and so has no XDG_RUNTIME_DIR set. Best-guess the
@@ -77,13 +156,14 @@ function playLocal(file: string) {
   });
 }
 
-// Triggers a status sound: schedules the Pi's own local playback for
-// (now + LOOKAHEAD_MS) and, at the same instant this function is called,
-// broadcasts that same target timestamp for any listening browser to
-// schedule itself against. See /ws/sfx in server.ts for the broadcast side.
+// Triggers a status sound: broadcasts playAt for any listening browser to
+// schedule itself against (see /ws/sfx in server.ts), and schedules the
+// Pi's own local playback *compensated* for its measured startup overhead
+// so the two land together instead of the Pi trailing behind.
 export function triggerSfx(event: SfxEvent) {
   const playAt = Date.now() + LOOKAHEAD_MS;
   sfxEvents.emit("play", { event, play_at: playAt });
-  const delay = playAt - Date.now();
-  setTimeout(() => playLocal(SFX_FILES[event]), Math.max(0, delay));
+  const execAt = playAt - currentLocalLatencyMs();
+  const delay = Math.max(0, execAt - Date.now());
+  setTimeout(() => playLocal(event), delay);
 }

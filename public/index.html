@@ -409,6 +409,9 @@
                 <button class="btn" data-sfx-test="error">Error</button>
               </span>
             </div>
+            <div class="opt-row">
+              <span class="k">Pi/browser sync<small id="optSfxTiming">—</small></span>
+            </div>
           </div>
 
           <div class="opt-section">
@@ -491,6 +494,7 @@
   const optSfxBtn = $('optSfxBtn'), optBrowserMode = $('optBrowserMode'), optBrowserRestart = $('optBrowserRestart');
   const optUpdateInterval = $('optUpdateInterval'), optCheckNow = $('optCheckNow'), optUpdateMeta = $('optUpdateMeta');
   const optMemorySummary = $('optMemorySummary'), optForget = $('optForget'), optRawStatus = $('optRawStatus');
+  const optSfxTiming = $('optSfxTiming');
 
   const STORAGE_KEY = 'caden.session.v2';
   const AGENT_LABELS = { caden: 'Caden', researcher: 'Research', scout: 'Scout' };
@@ -922,6 +926,9 @@
         if ([...optUpdateInterval.options].some((o) => o.value === val)) optUpdateInterval.value = val;
       }
       optUpdateMeta.textContent = status.update?.last_checked ? 'Last checked ' + new Date(status.update.last_checked).toLocaleTimeString('en-GB', { hour12: false }) : 'Not checked yet this session';
+      if (status.sfx) {
+        optSfxTiming.textContent = 'Lookahead ' + status.sfx.lookahead_ms + 'ms · local compensation ' + status.sfx.local_latency_ms + 'ms (' + status.sfx.local_latency_source + ')';
+      }
     } catch {}
     try {
       const mem = await (await fetch('/api/memory')).json();
@@ -962,6 +969,9 @@
       if (data.browser?.stream_interval_ms && document.activeElement !== intervalSelect) {
         const val = String(data.browser.stream_interval_ms);
         if ([...intervalSelect.options].some((o) => o.value === val)) intervalSelect.value = val;
+      }
+      if (data.sfx && !viewOptions.classList.contains('hidden')) {
+        optSfxTiming.textContent = 'Lookahead ' + data.sfx.lookahead_ms + 'ms · local compensation ' + data.sfx.local_latency_ms + 'ms (' + data.sfx.local_latency_source + ')';
       }
     } catch {
       linkDot.className = 'dot down'; linkText.textContent = 'LOST';

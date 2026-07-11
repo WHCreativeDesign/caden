@@ -284,22 +284,45 @@ and whatever browser is watching play the *same* sound at the *same*
 instant, not just "whenever each one hears about it."
 
 The trick is that `triggerSfx()` never plays immediately — it computes
-`playAt = now + LOOKAHEAD_MS` (150ms), broadcasts that timestamp over
-`/ws/sfx`, and schedules its own local `aplay`/`paplay` call for that exact
-future instant via `setTimeout`. The browser does the mirror image: it
-preloads all three sounds as decoded `AudioBuffer`s up front, and on
-receiving `{event, play_at}` computes `delay = play_at - Date.now()` and
-calls Web Audio's `AudioBufferSourceNode.start(audioCtx.currentTime + delay)`
-— sample-accurate once invoked, unlike a bare `setTimeout` + `play()`. Both
-sides are targeting the same wall-clock moment instead of racing a message
-across the network, which is what actually keeps them close — this was
-verified live (headless Playwright + a local server, no real audio hardware
-in this sandbox to hear it, but confirmed the browser schedules
-`start(when)` at the correct future offset and the server broadcasts/plays
-locally at the matching timestamp). It isn't physically perfect — bounded by
-clock skew between the Pi and whatever device the browser's on, and the one
-WS hop needed to learn the target time — but this is the right architecture
-for "as close as achievable," not "first one to hear about it wins."
+`playAt = now + LOOKAHEAD_MS` (220ms), broadcasts that timestamp over
+`/ws/sfx`, and schedules its own local `aplay`/`paplay` call via
+`setTimeout`. The browser does the mirror image: it preloads all three
+sounds as decoded `AudioBuffer`s up front, and on receiving
+`{event, play_at}` computes `delay = play_at - Date.now()` and calls Web
+Audio's `AudioBufferSourceNode.start(audioCtx.currentTime + delay)` —
+sample-accurate once invoked, unlike a bare `setTimeout` + `play()`.
+
+**The Pi's local playback is compensated, not just scheduled for `playAt`.**
+The browser's path has no startup cost once the AudioContext exists, but
+spawning `aplay` does — fork+exec, dynamic-linking `libasound`, and
+negotiating/opening the ALSA device all take real, non-trivial time, so a
+naive "exec at playAt" leaves the Pi's audible sound trailing visibly behind
+the browser's (this was the actual bug reported after SFX first started
+working — sound was audible but late). The fix: schedule the local exec for
+`playAt - <measured overhead>`, so that overhead is *consumed before* the
+target instant instead of *added after* it — like a performer counting
+themselves in early to land exactly on the beat. The overhead itself is
+measured live rather than guessed: each real `aplay` call's wall-clock time
+minus that clip's own known duration (read from its WAV header via
+`wavDurationMs()`) is pure startup overhead, smoothed with an EMA
+(`calibratedLatencyMs = calibratedLatencyMs*0.6 + overhead*0.4`) so it
+adapts to this specific Pi's actual hardware/load rather than a fixed
+constant. `SFX_AUDIO_DEVICE`'s `aplay` call also gets `--buffer-time
+80000 --period-time 20000` to trim ALSA's own default buffering latency
+(conservative enough not to risk underruns on a loaded Pi). `SFX_LOCAL_LATENCY_MS`
+overrides the calibration with a fixed value if it ever seems wrong;
+`GET /api/status`'s `sfx` field (also shown in the Options tab's raw status)
+reports the current lookahead, compensation value, and whether it's
+auto-calibrated or overridden.
+
+None of this is physically perfect — it's bounded by clock skew between the
+Pi and whatever device the browser's on, the one WS hop needed to learn the
+target time, and how well the live-measured overhead tracks reality — but
+this is the right architecture for "as close as achievable," not "first one
+to hear about it wins." Verified live in this sandbox (no real audio
+hardware to hear it) that the broadcast lead time and WAV-header duration
+parsing are both correct; the actual startup-overhead measurement can only
+be validated on the real Pi where `aplay` exists.
 
 Requires `aplay` (alsa-utils) or `paplay` (pulseaudio-utils) on the Pi —
 `install.sh` installs both. The web UI has an SFX On/Off toggle
