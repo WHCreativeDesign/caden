@@ -299,6 +299,9 @@
             </select>
             <button class="btn" id="newBtn">New</button>
           </div>
+          <div class="session-row" style="margin-top:8px;">
+            <button class="btn" id="sfxBtn" style="flex:1;" aria-pressed="true">SFX On</button>
+          </div>
         </div>
       </div>
 
@@ -394,6 +397,7 @@
   const linkDot = $('linkDot'), linkText = $('linkText'), sysText = $('sysText');
   const keySeg = $('keySeg');
   const tMainframe = $('tMainframe'), tSha = $('tSha'), tUptime = $('tUptime'), tGroq = $('tGroq'), tGemini = $('tGemini'), tBrowser = $('tBrowser'), tClock = $('tClock');
+  const sfxBtn = $('sfxBtn');
 
   const STORAGE_KEY = 'caden.session.v2';
   const AGENT_LABELS = { caden: 'Caden', researcher: 'Research', scout: 'Scout' };
@@ -705,6 +709,65 @@
     }).catch(() => {});
   });
 
+  // ── Status SFX ──────────────────────────────────────────────────────────
+  // The Pi plays these same sounds locally (src/sfx.ts) at the same target
+  // instant this broadcasts — see that file for why "target a shared future
+  // timestamp" beats "play the moment you hear about it" for keeping the two
+  // in sync. Web Audio's start(when) is sample-accurate once called, so the
+  // only slop left is clock skew between this device and the Pi, and the
+  // single WS hop needed to learn the target time in the first place.
+  const SFX_FILES = { sent: '/sfx/sent.wav', success: '/sfx/success.wav', error: '/sfx/error.wav' };
+  let sfxEnabled = true;
+  try { sfxEnabled = localStorage.getItem('caden.sfx') !== 'off'; } catch {}
+  let audioCtx = null;
+  const sfxBuffers = {};
+
+  function setSfxBtn() {
+    sfxBtn.textContent = sfxEnabled ? 'SFX On' : 'SFX Off';
+    sfxBtn.setAttribute('aria-pressed', String(sfxEnabled));
+    sfxBtn.style.opacity = sfxEnabled ? '1' : '0.55';
+  }
+  setSfxBtn();
+  sfxBtn.addEventListener('click', () => {
+    sfxEnabled = !sfxEnabled;
+    try { localStorage.setItem('caden.sfx', sfxEnabled ? 'on' : 'off'); } catch {}
+    setSfxBtn();
+  });
+
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      for (const [name, url] of Object.entries(SFX_FILES)) {
+        fetch(url).then((r) => r.arrayBuffer()).then((buf) => audioCtx.decodeAudioData(buf)).then((decoded) => { sfxBuffers[name] = decoded; }).catch(() => {});
+      }
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  }
+  // Browsers require a real user gesture before audio can play — the send
+  // button click is exactly that, so unlock (and start preloading) there.
+  sendBtn.addEventListener('click', ensureAudioCtx, { once: true });
+  inputField.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) ensureAudioCtx(); }, { once: true });
+
+  function playSfxAt(name, playAtMs) {
+    if (!sfxEnabled || !audioCtx || !sfxBuffers[name]) return;
+    const delaySec = Math.max(0, (playAtMs - Date.now()) / 1000);
+    const src = audioCtx.createBufferSource();
+    src.buffer = sfxBuffers[name];
+    src.connect(audioCtx.destination);
+    src.start(audioCtx.currentTime + delaySec);
+  }
+
+  let sfxWs = null;
+  function connectSfxWs() {
+    sfxWs = new WebSocket(wsUrl('/ws/sfx'));
+    sfxWs.onmessage = (ev) => {
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.event && msg.play_at) playSfxAt(msg.event, msg.play_at);
+    };
+    sfxWs.onclose = () => setTimeout(connectSfxWs, 3000);
+    sfxWs.onerror = () => sfxWs.close();
+  }
+
   // ── Telemetry ─────────────────────────────────────────────────────────────
   function renderKeySeg(available, total) {
     const slots = 10;
@@ -750,6 +813,7 @@
   convMeta.textContent = AGENT_LABELS[agent];
   renderLog();
   connectLogWs();
+  connectSfxWs();
   pollStatus(); setInterval(pollStatus, 10000);
   tickClock(); setInterval(tickClock, 1000);
 })();

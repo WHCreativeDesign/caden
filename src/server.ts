@@ -9,6 +9,7 @@ import { auditEvents } from "./tools/shell.js";
 import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval } from "./tools/browser.js";
 import { updateStatus } from "./update.js";
 import { MAINFRAME_VERSION } from "./version.js";
+import { sfxEvents, triggerSfx } from "./sfx.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, "..", "public");
@@ -43,12 +44,15 @@ export function startServer() {
     const { agent, messages } = req.body ?? {};
     if (!Array.isArray(messages)) return res.status(400).json({ error: "`messages` must be an array." });
     const agentName: AgentName = ["caden", "researcher", "scout"].includes(agent) ? agent : "caden";
+    triggerSfx("sent");
     try {
       const thinking = await planThinking(messages);
       const planText = thinking.join("\n");
       const result = await runAgentTurn(messages, agentName, planText);
+      triggerSfx("success");
       res.json({ agent: agentName, agent_label: agentLabel(agentName), thinking, ...result });
     } catch (err) {
+      triggerSfx("error");
       res.status(502).json({ error: String((err as Error).message ?? err) });
     }
   });
@@ -56,6 +60,7 @@ export function startServer() {
   const httpServer = createServer(app);
   const logWss = new WebSocketServer({ noServer: true });
   const browserWss = new WebSocketServer({ noServer: true });
+  const sfxWss = new WebSocketServer({ noServer: true });
 
   logWss.on("connection", (ws: WebSocket) => {
     const onEntry = (entry: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(entry)); };
@@ -76,12 +81,20 @@ export function startServer() {
     });
   });
 
+  sfxWss.on("connection", (ws: WebSocket) => {
+    const onPlay = (msg: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
+    sfxEvents.on("play", onPlay);
+    ws.on("close", () => sfxEvents.off("play", onPlay));
+  });
+
   httpServer.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/ws/log") {
       logWss.handleUpgrade(req, socket, head, (ws) => logWss.emit("connection", ws));
     } else if (url.pathname === "/ws/browser") {
       browserWss.handleUpgrade(req, socket, head, (ws) => browserWss.emit("connection", ws));
+    } else if (url.pathname === "/ws/sfx") {
+      sfxWss.handleUpgrade(req, socket, head, (ws) => sfxWss.emit("connection", ws));
     } else {
       socket.destroy();
     }

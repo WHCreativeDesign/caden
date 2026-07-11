@@ -50,8 +50,9 @@ src/
   env.ts                 — shared .env loader used by both index.ts and cli.ts
   agent.ts                — the tool-calling agent loop, personas (caden/researcher/scout)
   providers.ts              — Groq/Gemini key cycling (in-memory, single-user — no DB)
-  server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/browser
+  server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/browser, /ws/sfx
   update.ts                   — self-update watcher (git fetch/pull → rebuild → exit; systemd relaunches)
+  sfx.ts                        — status SFX: broadcasts + local aplay/paplay playback, synced with the browser
   tools/
     web.ts                      — web_search, fetch_page, calculate, get_current_time
     shell.ts                     — run_shell + the audit log + the hardcoded deny list
@@ -62,6 +63,8 @@ src/
 public/
   index.html               — the whole web frontend: one self-contained file, no build step, no CDN deps
                               (amber industrial-terminal look — "Domestic Agent System")
+  sfx/*.wav                — synthesized status sounds (sent/success/error), served statically and
+                              also played locally on the Pi by src/sfx.ts
 bin/caden-chat             — thin wrapper exec'ing dist/cli.js; install.sh symlinks it to /usr/local/bin
 systemd/caden.service      — the service unit (Restart=always, WantedBy=multi-user.target)
 scripts/
@@ -237,6 +240,40 @@ guessing or trying to shell out to check — which is exactly what it did
 before this existed (tried a hallucinated `mainframe -v` command). Also
 surfaced in `/api/status` as `mainframe_version` and shown in the web UI's
 TELEMETRY panel as `MAINFRAME`. Bump `package.json`'s version to update it.
+
+## Status SFX (Pi ↔ browser synced sound)
+
+`src/sfx.ts` + `/ws/sfx` in `server.ts` give Caden three status sounds —
+`sent` (message received by the server), `success` (reply completed),
+`error` (the turn failed) — synthesized (not downloaded) into
+`public/sfx/*.wav` (see the generator script used to build them, since
+there's no license/CDN dependency this way). The goal: the Pi's own speaker
+and whatever browser is watching play the *same* sound at the *same*
+instant, not just "whenever each one hears about it."
+
+The trick is that `triggerSfx()` never plays immediately — it computes
+`playAt = now + LOOKAHEAD_MS` (150ms), broadcasts that timestamp over
+`/ws/sfx`, and schedules its own local `aplay`/`paplay` call for that exact
+future instant via `setTimeout`. The browser does the mirror image: it
+preloads all three sounds as decoded `AudioBuffer`s up front, and on
+receiving `{event, play_at}` computes `delay = play_at - Date.now()` and
+calls Web Audio's `AudioBufferSourceNode.start(audioCtx.currentTime + delay)`
+— sample-accurate once invoked, unlike a bare `setTimeout` + `play()`. Both
+sides are targeting the same wall-clock moment instead of racing a message
+across the network, which is what actually keeps them close — this was
+verified live (headless Playwright + a local server, no real audio hardware
+in this sandbox to hear it, but confirmed the browser schedules
+`start(when)` at the correct future offset and the server broadcasts/plays
+locally at the matching timestamp). It isn't physically perfect — bounded by
+clock skew between the Pi and whatever device the browser's on, and the one
+WS hop needed to learn the target time — but this is the right architecture
+for "as close as achievable," not "first one to hear about it wins."
+
+Requires `aplay` (alsa-utils) or `paplay` (pulseaudio-utils) on the Pi —
+`install.sh` installs both. The web UI has an SFX On/Off toggle
+(`localStorage`-persisted) in the SESSION panel; audio only starts once
+unlocked by a genuine user gesture (the Send button / Enter key), per
+browser autoplay policy.
 
 ## Key management
 

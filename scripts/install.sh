@@ -95,6 +95,11 @@ run_step "Installing Playwright's Chromium (+ system deps)" bash -c "npx playwri
 # desktop stack without needing to know in advance which one is running.
 run_step "Installing screen-capture tools (grim, scrot)" bash -c "${SUDO} apt-get update -qq && ${SUDO} apt-get install -y grim scrot"
 
+# Status SFX play locally on the Pi's own speaker (src/sfx.ts) — aplay
+# (ALSA) is the near-universal Raspberry Pi OS default; pulseaudio-utils'
+# paplay is the fallback for setups running a sound server instead.
+run_step "Installing audio playback tools (alsa-utils, pulseaudio-utils)" bash -c "${SUDO} apt-get install -y alsa-utils pulseaudio-utils"
+
 run_step "Building" npm run build
 
 # ── API keys — interactive, over /dev/tty so this works via curl | bash ──
