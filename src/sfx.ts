@@ -22,12 +22,15 @@ import { auditEvents } from "./tools/shell.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SFX_DIR = join(__dirname, "..", "public", "sfx");
 
-export type SfxEvent = "sent" | "success" | "error";
+export type SfxEvent = "sent" | "success" | "error" | "thinking" | "reminder" | "startup";
 
 const SFX_FILES: Record<SfxEvent, string> = {
   sent: join(SFX_DIR, "sent.wav"),
   success: join(SFX_DIR, "success.wav"),
   error: join(SFX_DIR, "error.wav"),
+  thinking: join(SFX_DIR, "thinking.wav"),
+  reminder: join(SFX_DIR, "reminder.wav"),
+  startup: join(SFX_DIR, "startup.wav"),
 };
 
 // How far ahead of "now" a scheduled play-time is set. Needs to comfortably
@@ -61,6 +64,9 @@ const SFX_DURATIONS_MS: Record<SfxEvent, number> = {
   sent: wavDurationMs(SFX_FILES.sent),
   success: wavDurationMs(SFX_FILES.success),
   error: wavDurationMs(SFX_FILES.error),
+  thinking: wavDurationMs(SFX_FILES.thinking),
+  reminder: wavDurationMs(SFX_FILES.reminder),
+  startup: wavDurationMs(SFX_FILES.startup),
 };
 
 // The gap the user actually noticed: playAt is exact, but spawning `aplay`

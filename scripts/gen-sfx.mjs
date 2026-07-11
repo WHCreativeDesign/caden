@@ -88,7 +88,35 @@ const error = concat(
   tone({ freq: 146.83, ms: 200, type: "square", gain: 0.24, fadeMs: 6 }),
 );
 
+// "thinking" — a brief, quiet single tick. Plays once per turn that needs
+// real tool work, so it has to be unobtrusive enough to hear often without
+// being annoying — much quieter/shorter than the others.
+const thinking = tone({ freq: 392.0, ms: 45, gain: 0.18, fadeMs: 10 });
+
+// "reminder" — a warm two-tone doorbell-style chime (perfect fourth up),
+// deliberately the most attention-getting sound since it fires unprompted.
+const reminder = concat(
+  tone({ freq: 587.33, ms: 160, gain: 0.4 }),
+  silence(30),
+  tone({ freq: 440.0, ms: 220, gain: 0.42 }),
+);
+
+// "startup" — a brighter four-note ascending sweep ("systems online"),
+// longer and more ceremonial since it plays once per boot, not per turn.
+const startup = concat(
+  tone({ freq: 392.0, ms: 90, gain: 0.32 }),
+  silence(10),
+  tone({ freq: 523.25, ms: 90, gain: 0.34 }),
+  silence(10),
+  tone({ freq: 659.25, ms: 90, gain: 0.36 }),
+  silence(10),
+  tone({ freq: 880.0, ms: 160, gain: 0.4 }),
+);
+
 writeFileSync(join(OUT_DIR, "sent.wav"), toWav(sent));
 writeFileSync(join(OUT_DIR, "success.wav"), toWav(success));
 writeFileSync(join(OUT_DIR, "error.wav"), toWav(error));
-console.log("wrote sent.wav, success.wav, error.wav to", OUT_DIR);
+writeFileSync(join(OUT_DIR, "thinking.wav"), toWav(thinking));
+writeFileSync(join(OUT_DIR, "reminder.wav"), toWav(reminder));
+writeFileSync(join(OUT_DIR, "startup.wav"), toWav(startup));
+console.log("wrote sent/success/error/thinking/reminder/startup.wav to", OUT_DIR);

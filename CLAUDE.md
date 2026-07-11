@@ -60,11 +60,14 @@ src/
     desktop.ts                     — screenshot_desktop: whole-screen capture (local or remote session)
     agentDispatch.ts               — dispatch_agent, a bounded parallel research sub-agent
     memory.ts                       — remember tool + ~/.caden/memory.json (cross-session memory)
+    system.ts                        — system_status: CPU temp, memory, disk, load, uptime
+    weather.ts                        — get_weather: live conditions via wttr.in, no API key
+    reminders.ts                       — set_reminder/list_reminders/cancel_reminder + the due-check watcher
 public/
   index.html               — the whole web frontend: one self-contained file, no build step, no CDN deps
                               (amber industrial-terminal look — "Domestic Agent System")
-  sfx/*.wav                — synthesized status sounds (sent/success/error), served statically and
-                              also played locally on the Pi by src/sfx.ts
+  sfx/*.wav                — synthesized status sounds (sent/success/error/thinking/reminder/startup),
+                              served statically and also played locally on the Pi by src/sfx.ts
 bin/caden-chat             — thin wrapper exec'ing dist/cli.js; install.sh symlinks it to /usr/local/bin
 systemd/caden.service      — the service unit (Restart=always, WantedBy=multi-user.target)
 scripts/
@@ -117,9 +120,11 @@ otherwise need to SSH in and either edit `.env` + restart, or poke at with
 `curl`, for. Every control there is backed by a real endpoint, not a fake
 toggle:
 
-- **Audio** — the SFX On/Off toggle (moved here from the Session panel) and
-  three "test sound" buttons that hit `POST /api/sfx/test {event}` to fire a
-  sound immediately, without needing a real chat turn to happen to try one.
+- **Audio** — the SFX On/Off toggle (moved here from the Session panel), six
+  "test sound" buttons that hit `POST /api/sfx/test {event}` to fire any of
+  the six status sounds immediately without needing a real chat turn, and a
+  live readout of the current lookahead/compensation values (see Status SFX
+  below).
 - **Browser** — a mode override (`POST /api/browser/mode`) that beats
   `BROWSER_MODE` from `.env` at runtime (`setModeOverride` in
   `tools/browser.ts`), plus a Restart button (`POST /api/browser/restart` →
@@ -135,6 +140,8 @@ toggle:
   `forgetMemory()` in `tools/memory.ts`) that resets it to first-contact —
   useful both for actually asking to be forgotten and for testing the
   greeting flow without editing `~/.caden/memory.json` by hand.
+- **Reminders** — a read-only list of pending reminders (`GET /api/reminders`);
+  see Reminders below for how they're set (conversationally) and fire.
 - **Raw Status** — a collapsible `<pre>` of the live `/api/status` payload,
   for whenever the summarized panels aren't enough.
 
@@ -225,6 +232,50 @@ paper.
   reachable, not just the inside of the browser tab.
 - **`remember`** — persists the user's name and durable facts across
   conversations. See Memory above.
+- **`system_status`** (`tools/system.ts`) — real vitals about the machine
+  Caden lives on: CPU temperature (`/sys/class/thermal/thermal_zone0/temp`,
+  falling back to `vcgencmd measure_temp`), memory/disk usage, load average,
+  system uptime. Built as a dedicated structured tool rather than left to
+  `run_shell` — parsing `vcgencmd`/`df` output correctly through a
+  text-only tool call is exactly the kind of thing a model otherwise gets
+  subtly wrong. Answers "how are you doing" / "are you overheating" for
+  real instead of a guess.
+- **`get_weather`** — live conditions for a place via wttr.in's `j1` JSON
+  endpoint, no API key needed (same "avoid key-gated dependencies where
+  possible" instinct as the DDG-scrape `web_search`). This is itself a live
+  source, so the persona treats it as authoritative rather than something
+  `ACCURACY_BRIEF` demands double-checking via `browser_open`.
+- **`set_reminder` / `list_reminders` / `cancel_reminder`** (`tools/reminders.ts`)
+  — the one genuinely *proactive* thing in this app: Caden can surface
+  something later without being asked again, even in a future conversation.
+  See "Reminders" below.
+
+## Reminders (proactive, not just reactive)
+
+Persisted to `~/.caden/reminders.json` (same pattern as `memory.ts`).
+`startReminderWatcher()` (called once from `index.ts`) checks on a 15s
+interval rather than one `setTimeout` per reminder — simpler, and it
+survives process restarts (self-update, crash) without needing to
+reschedule anything on boot.
+
+A reminder coming due does three things at once, all from the same check in
+`checkDue()`:
+1. Emits `reminderEvents` `"due"`, which `server.ts` relays over
+   `/ws/reminders` for a live toast in the web UI (`showToast()` in
+   `index.html`) — visible even if no chat is happening.
+2. Calls `triggerSfx("reminder")` — the same synced-playback mechanism as
+   every other status sound (see Status SFX below), so it's audible on the
+   Pi's own speaker too, not just wherever a browser tab happens to be open.
+3. Marks itself `fired` (but not yet `acknowledged`) so the *next* real chat
+   turn folds it into context regardless of whether the toast/sound were
+   seen or heard — `reminderContext()` in `agent.ts` checks
+   `pendingNotifications()` right where `memoryContext` is injected, tells
+   the model to mention it naturally, then calls `acknowledgeReminders()` so
+   it isn't repeated on every subsequent turn forever.
+
+`GET /api/reminders` (pending only) backs a small read-only list in the
+Options tab — creating/cancelling reminders is conversational
+("remind me to..."), not a form, since that's the natural way to use this.
 
 ## Vision (image input)
 
@@ -275,18 +326,30 @@ TELEMETRY panel as `MAINFRAME`. Bump `package.json`'s version to update it.
 
 ## Status SFX (Pi ↔ browser synced sound)
 
-`src/sfx.ts` + `/ws/sfx` in `server.ts` give Caden three status sounds —
-`sent` (message received by the server), `success` (reply completed),
-`error` (the turn failed) — synthesized (not downloaded) into
-`public/sfx/*.wav` (see the generator script used to build them, since
-there's no license/CDN dependency this way). The goal: the Pi's own speaker
-and whatever browser is watching play the *same* sound at the *same*
-instant, not just "whenever each one hears about it."
+`src/sfx.ts` + `/ws/sfx` in `server.ts` give Caden six status sounds,
+synthesized (not downloaded) into `public/sfx/*.wav` via
+`scripts/gen-sfx.mjs` (see that script's comments, since there's no
+license/CDN dependency this way):
+- `sent` — the server received a message.
+- `thinking` — fired once per turn, the moment it starts actually using
+  tools (not on every reply) — an audible "on it" for turns that take a few
+  rounds of browsing/research and would otherwise go quiet for a while.
+- `success` — the reply completed.
+- `error` — the turn failed.
+- `reminder` — a reminder came due (see Reminders above) — deliberately the
+  most attention-getting of the six, since it's the only one that fires
+  unprompted.
+- `startup` — Caden came online (`index.ts`, once per boot — including
+  self-update relaunches, a reasonable "back online" moment too).
+
+The goal: the Pi's own speaker and whatever browser is watching play the
+*same* sound at the *same* instant, not just "whenever each one hears about
+it."
 
 The trick is that `triggerSfx()` never plays immediately — it computes
 `playAt = now + LOOKAHEAD_MS` (220ms), broadcasts that timestamp over
 `/ws/sfx`, and schedules its own local `aplay`/`paplay` call via
-`setTimeout`. The browser does the mirror image: it preloads all three
+`setTimeout`. The browser does the mirror image: it preloads all six
 sounds as decoded `AudioBuffer`s up front, and on receiving
 `{event, play_at}` computes `delay = play_at - Date.now()` and calls Web
 Audio's `AudioBufferSourceNode.start(audioCtx.currentTime + delay)` —

@@ -11,6 +11,9 @@ import { updateStatus, setUpdateInterval, checkNow } from "./update.js";
 import { MAINFRAME_VERSION } from "./version.js";
 import { sfxEvents, triggerSfx, sfxStatus, SfxEvent } from "./sfx.js";
 import { loadMemory, forgetMemory } from "./tools/memory.js";
+import { reminderEvents, listReminders } from "./tools/reminders.js";
+
+const SFX_EVENTS: SfxEvent[] = ["sent", "success", "error", "thinking", "reminder", "startup"];
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, "..", "public");
@@ -74,9 +77,13 @@ export function startServer() {
 
   app.post("/api/sfx/test", (req, res) => {
     const event = req.body?.event;
-    if (!["sent", "success", "error"].includes(event)) return res.status(400).json({ error: "event must be sent, success, or error" });
+    if (!SFX_EVENTS.includes(event)) return res.status(400).json({ error: `event must be one of: ${SFX_EVENTS.join(", ")}` });
     triggerSfx(event as SfxEvent);
     res.json({ ok: true });
+  });
+
+  app.get("/api/reminders", (_req, res) => {
+    res.json({ reminders: listReminders() });
   });
 
   app.post("/api/chat", async (req, res) => {
@@ -100,6 +107,7 @@ export function startServer() {
   const logWss = new WebSocketServer({ noServer: true });
   const browserWss = new WebSocketServer({ noServer: true });
   const sfxWss = new WebSocketServer({ noServer: true });
+  const remindersWss = new WebSocketServer({ noServer: true });
 
   logWss.on("connection", (ws: WebSocket) => {
     const onEntry = (entry: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(entry)); };
@@ -126,6 +134,12 @@ export function startServer() {
     ws.on("close", () => sfxEvents.off("play", onPlay));
   });
 
+  remindersWss.on("connection", (ws: WebSocket) => {
+    const onDue = (reminder: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(reminder)); };
+    reminderEvents.on("due", onDue);
+    ws.on("close", () => reminderEvents.off("due", onDue));
+  });
+
   httpServer.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/ws/log") {
@@ -134,6 +148,8 @@ export function startServer() {
       browserWss.handleUpgrade(req, socket, head, (ws) => browserWss.emit("connection", ws));
     } else if (url.pathname === "/ws/sfx") {
       sfxWss.handleUpgrade(req, socket, head, (ws) => sfxWss.emit("connection", ws));
+    } else if (url.pathname === "/ws/reminders") {
+      remindersWss.handleUpgrade(req, socket, head, (ws) => remindersWss.emit("connection", ws));
     } else {
       socket.destroy();
     }

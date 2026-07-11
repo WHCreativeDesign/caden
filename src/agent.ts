@@ -7,12 +7,19 @@ import { browserTools } from "./tools/browser.js";
 import { desktopTools } from "./tools/desktop.js";
 import { agentDispatchTools } from "./tools/agentDispatch.js";
 import { memoryTools, loadMemory, memoryContext } from "./tools/memory.js";
+import { systemTools } from "./tools/system.js";
+import { weatherTools } from "./tools/weather.js";
+import { reminderTools, pendingNotifications, acknowledgeReminders } from "./tools/reminders.js";
 import { MAINFRAME_VERSION } from "./version.js";
+import { triggerSfx } from "./sfx.js";
 import { ToolDef, ToolSchema } from "./types.js";
 
 export type AgentName = "caden" | "researcher" | "scout";
 
-const ALL_TOOLS: ToolDef[] = [...webTools, ...shellTools, ...browserTools, ...desktopTools, ...agentDispatchTools, ...memoryTools];
+const ALL_TOOLS: ToolDef[] = [
+  ...webTools, ...shellTools, ...browserTools, ...desktopTools, ...agentDispatchTools,
+  ...memoryTools, ...systemTools, ...weatherTools, ...reminderTools,
+];
 const TOOL_SCHEMAS: ToolSchema[] = ALL_TOOLS.map((t) => t.schema);
 const TOOL_HANDLERS = new Map(ALL_TOOLS.map((t) => [t.schema.function.name, t.handler]));
 
@@ -53,11 +60,29 @@ const CAPABILITIES_BRIEF =
   "captures your ENTIRE desktop — every window, not just a browser tab, " +
   "local or remote session alike; web_search and fetch_page reach the live " +
   "web; dispatch_agent runs a focused research sub-task in parallel, with " +
-  "its own browser access to verify firsthand. Images the person sends you, " +
+  "its own browser access to verify firsthand; system_status reports your " +
+  "own CPU temperature, memory, disk, and load, so you can actually answer " +
+  "how you're doing instead of guessing; get_weather gives live conditions " +
+  "for a place, no extra verification needed since it's already a live " +
+  "source; set_reminder/list_reminders/cancel_reminder let you follow up on " +
+  "something later, unprompted — even in a future conversation, and as a " +
+  "live notification if someone's watching. Images the person sends you, " +
   "and screenshots you take yourself, are shown to you directly afterward — " +
   "you actually see them, not just a note that a file exists. Reach for " +
   "these only when they serve the person, and just do the thing — don't " +
   "announce a tool call before making it or narrate mechanics.";
+
+// Reminders that fired since the last turn get folded in here, the same
+// pattern as memoryContext below — read it, mention it naturally, don't
+// recite it as a system notification. See tools/reminders.ts for how firing
+// and the live toast/SFX work independently of this.
+function reminderContext(): string | null {
+  const due = pendingNotifications();
+  if (!due.length) return null;
+  acknowledgeReminders(due.map((r) => r.id));
+  const lines = due.map((r) => `- ${r.message} (was due ${new Date(r.due_at).toLocaleString()})`);
+  return "REMINDERS: The following came due since you last spoke — bring them up naturally, don't just recite this list:\n" + lines.join("\n");
+}
 
 // A web_search snippet is often stale or subtly wrong (this has bitten Caden
 // for real: a "latest X" question answered straight from a snippet, missing
@@ -177,9 +202,12 @@ export async function runAgentTurn(
     workingMessages.unshift({ role: "system", content: agent.system });
   }
   // Memory sits right after the persona so what Caden knows about the person
-  // frames everything else. Plan (if any) follows.
+  // frames everything else, then any reminders that just came due. Plan (if
+  // any) follows.
   let insertAt = 1;
   workingMessages.splice(insertAt++, 0, { role: "system", content: memoryContext(loadMemory()) });
+  const reminders = reminderContext();
+  if (reminders) workingMessages.splice(insertAt++, 0, { role: "system", content: reminders });
   if (plan?.trim()) {
     workingMessages.splice(insertAt++, 0, {
       role: "system",
@@ -188,6 +216,7 @@ export async function runAgentTurn(
   }
 
   const steps: AgentStep[] = [];
+  let announcedThinking = false;
 
   for (let round = 0; round < agent.rounds; round++) {
     const response: any = await llm(workingMessages, agent.profile, TOOL_SCHEMAS);
@@ -197,6 +226,11 @@ export async function runAgentTurn(
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
       return { reply: msg.content ?? "", steps, rounds: round + 1 };
     }
+
+    // Once per turn, the moment real tool work starts — an audible "on it"
+    // distinct from "sent", since a turn that needs several rounds of tool
+    // calls (browsing, research) can otherwise go quiet for a while.
+    if (!announcedThinking) { triggerSfx("thinking"); announcedThinking = true; }
 
     workingMessages.push({ role: "assistant", content: msg.content, tool_calls: msg.tool_calls });
 
