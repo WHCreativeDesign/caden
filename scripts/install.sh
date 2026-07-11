@@ -108,15 +108,37 @@ if command -v getent >/dev/null 2>&1 && ! id -nG "$CURRENT_USER" 2>/dev/null | g
   note "Group membership needs a fresh login to take effect — the systemd service picks it up on its next (re)start, done further down."
 fi
 
+# Force audio out the analog/headphone jack — Raspberry Pi OS commonly
+# defaults to HDMI even with headphones in the 3.5mm jack, which is exactly
+# what "no sound from the headphone jack" usually turns out to be. Prefer
+# raspi-config's nonint mode (the supported way on Raspberry Pi OS); fall
+# back to the raw ALSA control for images that don't have raspi-config.
+# Non-fatal either way — hardware without this control (USB audio, HATs)
+# just skips it rather than failing the install.
+if command -v raspi-config >/dev/null 2>&1; then
+  run_step "Routing audio to the headphone jack" bash -c "${SUDO} raspi-config nonint do_audio 1 || true"
+else
+  run_step "Routing audio to the headphone jack" bash -c "${SUDO} amixer cset numid=3 1 >/dev/null 2>&1 || true"
+fi
+
+# Unmute and raise volume — a muted or near-zero mixer is the other common
+# reason for total silence. Control names vary by sound card, so try the
+# usual suspects and don't fail the install if none match this hardware.
+run_step "Unmuting and raising volume" bash -c "
+  for ctl in Master PCM Speaker Headphone; do
+    amixer sset \"\$ctl\" unmute 100% >/dev/null 2>&1 || true
+    amixer sset \"\$ctl\" 100% >/dev/null 2>&1 || true
+  done
+  true
+"
+
 # Print what ALSA can actually see so a silent headphone jack is at least
 # diagnosable from this output, rather than a mystery after the fact.
 echo ""
 say "Audio devices detected (aplay -l)"
 aplay -l 2>&1 | sed 's/^/  /' || note "aplay -l failed — is a sound card present?"
-note "If this doesn't list the analog/headphone output, or sound comes out"
-note "the wrong place (e.g. HDMI instead of the jack), force it with:"
-note "  sudo raspi-config  →  System Options  →  Audio  →  Headphones"
-note "or set SFX_AUDIO_DEVICE=plughw:<card>,<device> in .env (see .env.example)."
+note "If it's still silent after this, set SFX_AUDIO_DEVICE=plughw:<card>,<device>"
+note "in .env (see .env.example) using the card/device numbers listed above."
 
 run_step "Building" npm run build
 
