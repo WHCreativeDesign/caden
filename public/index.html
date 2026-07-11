@@ -307,6 +307,7 @@
         <div class="panel-body">
           <div class="subline up">Key Pool · Groq</div>
           <div class="seg" id="keySeg"></div>
+          <div class="kv"><span class="k">MAINFRAME</span><span class="v" id="tMainframe">—</span></div>
           <div class="kv"><span class="k">SW REV</span><span class="v" id="tSha">—</span></div>
           <div class="kv"><span class="k">UPTIME</span><span class="v" id="tUptime">—</span></div>
           <div class="kv"><span class="k">GROQ</span><span class="v" id="tGroq">—</span></div>
@@ -392,7 +393,7 @@
   const intervalSelect = $('intervalSelect');
   const linkDot = $('linkDot'), linkText = $('linkText'), sysText = $('sysText');
   const keySeg = $('keySeg');
-  const tSha = $('tSha'), tUptime = $('tUptime'), tGroq = $('tGroq'), tGemini = $('tGemini'), tBrowser = $('tBrowser'), tClock = $('tClock');
+  const tMainframe = $('tMainframe'), tSha = $('tSha'), tUptime = $('tUptime'), tGroq = $('tGroq'), tGemini = $('tGemini'), tBrowser = $('tBrowser'), tClock = $('tClock');
 
   const STORAGE_KEY = 'caden.session.v2';
   const AGENT_LABELS = { caden: 'Caden', researcher: 'Research', scout: 'Scout' };
@@ -721,6 +722,7 @@
       const data = await (await fetch('/api/status')).json();
       linkDot.className = 'dot ok'; linkText.textContent = 'OK';
       if (sysText.textContent.indexOf('WORKING') === -1) setSys('ONLINE // AWAITING INPUT');
+      tMainframe.textContent = data.mainframe_version ? 'v' + data.mainframe_version : '—';
       tSha.textContent = data.update?.sha || '—';
       const up = data.uptime_s || 0;
       tUptime.textContent = Math.floor(up / 3600) + 'H ' + String(Math.floor((up % 3600) / 60)).padStart(2, '0') + 'M';

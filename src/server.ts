@@ -8,6 +8,7 @@ import { providerStatus } from "./providers.js";
 import { auditEvents } from "./tools/shell.js";
 import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval } from "./tools/browser.js";
 import { updateStatus } from "./update.js";
+import { MAINFRAME_VERSION } from "./version.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, "..", "public");
@@ -25,6 +26,7 @@ export function startServer() {
   app.get("/api/status", (_req, res) => {
     res.json({
       uptime_s: Math.floor((Date.now() - START_TIME) / 1000),
+      mainframe_version: MAINFRAME_VERSION,
       update: updateStatus(),
       browser: browserStatus(),
       providers: providerStatus(),

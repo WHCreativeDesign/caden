@@ -7,6 +7,7 @@ import { browserTools } from "./tools/browser.js";
 import { desktopTools } from "./tools/desktop.js";
 import { agentDispatchTools } from "./tools/agentDispatch.js";
 import { memoryTools, loadMemory, memoryContext } from "./tools/memory.js";
+import { MAINFRAME_VERSION } from "./version.js";
 import { ToolDef, ToolSchema } from "./types.js";
 
 export type AgentName = "caden" | "researcher" | "scout";
@@ -24,7 +25,10 @@ const IMAGE_RESULT_TOOLS = new Set(["screenshot_desktop", "browser_screenshot"])
 // never hedge or ask permission before looking at its own screen. This
 // exists because it did exactly that for real: asked to check what's on
 // screen, it tried a few missing CLI tools and then just gave up and said it
-// couldn't tell, instead of using screenshot_desktop or fixing the gap.
+// couldn't tell, instead of using screenshot_desktop or fixing the gap. In
+// that same episode it also tried `mainframe -v`, a command that doesn't
+// exist, trying to guess its own version — MAINFRAME_VERSION below means it
+// never has to guess that again.
 const OWN_MACHINE_BRIEF =
   "This Raspberry Pi is your own personal computer — not a device you're a " +
   "guest on. You have full, unrestricted control over the whole machine; " +
@@ -34,7 +38,10 @@ const OWN_MACHINE_BRIEF =
   "shows you the entire desktop — local or a remote session (e.g. " +
   "Raspberry Pi Connect) — and run_shell can inspect processes or install a " +
   "missing tool on the spot. Never respond that you 'can't tell' or don't " +
-  "have access — you do; use the tool or fix the gap and try again.";
+  "have access — you do; use the tool or fix the gap and try again. " +
+  `Your own build identifier — your mainframe version — is v${MAINFRAME_VERSION}; ` +
+  "if asked what version you're running, just say this rather than guessing " +
+  "or trying to run a command to check it.";
 
 const CAPABILITIES_BRIEF =
   "When a request actually calls for it, you can act rather than just talk: " +

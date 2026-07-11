@@ -219,6 +219,18 @@ still support tool calling — so vision isn't Gemini-only. `providers.ts`'s
 content part and swaps to that model id, but the provider order is unchanged
 — Groq first, Gemini as fallback if Groq fails, exactly like plain text.
 
+## Version ("mainframe version")
+
+`src/version.ts` reads `MAINFRAME_VERSION` straight from `package.json`'s
+`version` field — one source of truth, always accurate for whatever build is
+actually running since self-update rebuilds and restarts the process (fresh
+module load = fresh read). It's injected into `OWN_MACHINE_BRIEF` in
+`agent.ts` so Caden can just state its own version if asked, rather than
+guessing or trying to shell out to check — which is exactly what it did
+before this existed (tried a hallucinated `mainframe -v` command). Also
+surfaced in `/api/status` as `mainframe_version` and shown in the web UI's
+TELEMETRY panel as `MAINFRAME`. Bump `package.json`'s version to update it.
+
 ## Key management
 
 No more Postgres/RLS key-cycling table — this is single-user hardware now,
