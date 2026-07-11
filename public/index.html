@@ -193,6 +193,8 @@
   .turn-caden .turn-body { color: var(--cream); }
   .turn-body a { color: var(--amber); }
   .turn-meta { margin-top: 8px; font-size: 10.5px; letter-spacing: 0.08em; color: var(--faint); }
+  .turn-images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .turn-images img { max-width: 220px; max-height: 220px; border: 1px solid var(--border); }
 
   .caret { display: inline-block; width: 8px; height: 15px; margin-left: 2px; background: var(--amber); vertical-align: -3px; animation: blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity: 0; } }
@@ -216,6 +218,15 @@
   .trace-line { white-space: pre-wrap; padding: 1px 0; }
   .trace-line b { color: var(--amber); }
   .trace-line span { color: var(--faint); }
+
+  /* Attachment preview strip */
+  .attach-row { display: none; flex-wrap: wrap; gap: 8px; padding: 10px 14px 0; flex: 0 0 auto; }
+  .attach-thumb { position: relative; width: 56px; height: 56px; border: 1px solid var(--border); }
+  .attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .attach-remove {
+    position: absolute; top: -7px; right: -7px; width: 16px; height: 16px; line-height: 14px;
+    background: var(--red); color: #fff; border: 1px solid var(--bg); font-size: 11px; padding: 0;
+  }
 
   /* Input row */
   .input-row {
@@ -322,9 +333,12 @@
             <div class="conv-empty up" id="chatEmpty"><span class="big">CADEN</span>online // awaiting input</div>
           </div>
         </div>
+        <div class="attach-row" id="attachRow"></div>
         <div class="input-row">
           <span class="input-caret">&gt;</span>
           <textarea class="input-field" id="inputField" placeholder="Type a message" rows="1"></textarea>
+          <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+          <button class="btn" id="attachBtn" title="Attach an image">Attach</button>
           <button class="btn btn-amber" id="sendBtn">Send</button>
         </div>
       </div>
@@ -371,6 +385,7 @@
   const chatScroll = $('chatScroll'), chatInner = $('chatInner'), chatEmpty = $('chatEmpty');
   const agentSelect = $('agentSelect'), newBtn = $('newBtn'), convMeta = $('convMeta');
   const inputField = $('inputField'), sendBtn = $('sendBtn');
+  const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachRow = $('attachRow');
   const tabChat = $('tabChat'), tabSystem = $('tabSystem'), tabBrowser = $('tabBrowser');
   const viewChat = $('viewChat'), viewSystem = $('viewSystem'), viewBrowser = $('viewBrowser');
   const logBody = $('logBody'), logEmpty = $('logEmpty'), browserView = $('browserView'), browserMeta = $('browserMeta');
@@ -386,6 +401,7 @@
   let history = [];
   let log = [];
   let inFlight = false;
+  let pendingImages = []; // data: URLs, staged for the next send
 
   function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ agent, history, log })); } catch {} }
   function load() {
@@ -456,12 +472,18 @@
     });
   }
 
-  function addUserTurn(text) {
+  function addUserTurn(text, images) {
     chatEmpty.style.display = 'none';
     const turn = document.createElement('div'); turn.className = 'turn turn-user';
     const label = document.createElement('div'); label.className = 'turn-label'; label.textContent = 'YOU';
     const body = document.createElement('div'); body.className = 'turn-body'; body.textContent = text;
-    turn.append(label, body); chatInner.appendChild(turn); scrollChat();
+    turn.append(label, body);
+    if (images && images.length) {
+      const row = document.createElement('div'); row.className = 'turn-images';
+      images.forEach((url) => { const im = document.createElement('img'); im.src = url; row.appendChild(im); });
+      turn.appendChild(row);
+    }
+    chatInner.appendChild(turn); scrollChat();
   }
 
   function addCadenTurn({ text, thinking, steps, meta, err }) {
@@ -486,23 +508,27 @@
     [...chatInner.querySelectorAll('.turn')].forEach((el) => el.remove());
     chatEmpty.style.display = log.length ? 'none' : '';
     for (const entry of log) {
-      if (entry.role === 'user') addUserTurn(entry.text);
+      if (entry.role === 'user') addUserTurn(entry.text, entry.images);
       else addCadenTurn(entry);
     }
   }
 
   function showDots(el) { el.innerHTML = ''; const d = document.createElement('span'); d.className = 'dots'; d.innerHTML = '<i></i><i></i><i></i>'; el.appendChild(d); }
 
-  async function ask(text) {
+  async function ask(text, images) {
     if (inFlight) return;
     const prompt = text.trim();
-    if (!prompt) return;
+    images = images || [];
+    if (!prompt && !images.length) return;
     inFlight = true; sendBtn.disabled = true;
     setSys('WORKING // PROCESSING REQUEST');
     const t0 = performance.now();
-    history.push({ role: 'user', content: prompt });
-    log.push({ role: 'user', text: prompt });
-    addUserTurn(prompt); save();
+    const content = images.length
+      ? [{ type: 'text', text: prompt || '(see attached image)' }, ...images.map((url) => ({ type: 'image_url', image_url: { url } }))]
+      : prompt;
+    history.push({ role: 'user', content });
+    log.push({ role: 'user', text: prompt, images });
+    addUserTurn(prompt, images); save();
 
     const live = addCadenTurn({ text: '', meta: {} });
     const trace = buildTrace({ live: true });
@@ -548,11 +574,71 @@
     }
   }
 
-  function submit() { const v = inputField.value; inputField.value = ''; autoGrow(); ask(v); }
+  function submit() {
+    const v = inputField.value; inputField.value = ''; autoGrow();
+    const images = pendingImages; pendingImages = []; renderAttachRow();
+    ask(v, images);
+  }
   sendBtn.addEventListener('click', submit);
   inputField.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } });
   function autoGrow() { inputField.style.height = 'auto'; inputField.style.height = Math.min(140, inputField.scrollHeight) + 'px'; }
   inputField.addEventListener('input', autoGrow);
+
+  // ── Image attachments ──────────────────────────────────────────────────
+  // Downscaled client-side (max 1400px, JPEG ~80%) before ever touching the
+  // network — a phone photo straight off a camera has no business going over
+  // the wire at full size just to be described back.
+  function downscaleImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const maxDim = 1400;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            const scale = maxDim / Math.max(width, height);
+            width = Math.round(width * scale); height = Math.round(height * scale);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.82));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderAttachRow() {
+    attachRow.innerHTML = '';
+    attachRow.style.display = pendingImages.length ? 'flex' : 'none';
+    pendingImages.forEach((url, i) => {
+      const wrap = document.createElement('div'); wrap.className = 'attach-thumb';
+      const img = document.createElement('img'); img.src = url;
+      const x = document.createElement('button'); x.className = 'attach-remove'; x.textContent = '×';
+      x.addEventListener('click', () => { pendingImages.splice(i, 1); renderAttachRow(); });
+      wrap.append(img, x); attachRow.appendChild(wrap);
+    });
+  }
+
+  async function addImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    try { pendingImages.push(await downscaleImage(file)); renderAttachRow(); } catch {}
+  }
+
+  attachBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    for (const file of fileInput.files) await addImageFile(file);
+    fileInput.value = '';
+  });
+  inputField.addEventListener('paste', async (e) => {
+    const item = [...(e.clipboardData?.items || [])].find((it) => it.type.startsWith('image/'));
+    if (item) { e.preventDefault(); await addImageFile(item.getAsFile()); }
+  });
 
   agentSelect.addEventListener('change', () => { agent = agentSelect.value; convMeta.textContent = AGENT_LABELS[agent]; save(); });
   newBtn.addEventListener('click', () => { history = []; log = []; save(); renderLog(); });

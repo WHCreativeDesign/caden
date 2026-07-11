@@ -88,6 +88,13 @@ fi
 # ── App dependencies ─────────────────────────────────────────────────────
 run_step "Installing dependencies" npm ci
 run_step "Installing Playwright's Chromium (+ system deps)" bash -c "npx playwright install --with-deps chromium"
+
+# screenshot_desktop and the desktop-mirroring live view need a whole-screen
+# capture tool. Installing both a Wayland one (grim — Raspberry Pi OS's
+# default labwc desktop is Wayland) and an X11 one (scrot) covers either
+# desktop stack without needing to know in advance which one is running.
+run_step "Installing screen-capture tools (grim, scrot)" bash -c "${SUDO} apt-get update -qq && ${SUDO} apt-get install -y grim scrot"
+
 run_step "Building" npm run build
 
 # ── API keys — interactive, over /dev/tty so this works via curl | bash ──

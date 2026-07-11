@@ -56,6 +56,7 @@ src/
     web.ts                      — web_search, fetch_page, calculate, get_current_time
     shell.ts                     — run_shell + the audit log + the hardcoded deny list
     browser.ts                    — Playwright wrapper, local-display / streamed modes
+    desktop.ts                     — screenshot_desktop: whole-screen capture (local or remote session)
     agentDispatch.ts               — dispatch_agent, a bounded parallel research sub-agent
     memory.ts                       — remember tool + ~/.caden/memory.json (cross-session memory)
 public/
@@ -123,6 +124,20 @@ browser when a question needs real digging. Keep this discipline in sync
 across `caden`/`researcher`/`scout` if you touch the personas — it's the
 main defense against confidently-wrong answers, not a one-off patch.
 
+## This Pi is Caden's own machine
+
+`OWN_MACHINE_BRIEF` in `agent.ts` states plainly, in the `caden`/`researcher`
+system prompts, that the Pi is Caden's own personal computer, not a device
+it's a guest on — so it should never hedge, ask permission, or claim it
+"can't tell" what's on screen. This exists because it did exactly that for
+real: asked what was on screen, it tried a few window-management CLI tools
+that weren't installed (`wmctrl`, `xdotool`), got empty/failed output from
+each, and gave up rather than reaching for `screenshot_desktop` or just
+installing what it needed. Keep this framing in sync with the governance
+model above if you touch either — "full access, audited" is meant to make
+Caden confident about acting on its own hardware, not just permissive on
+paper.
+
 ## Tools
 
 - **`web_search` / `fetch_page` / `calculate` / `get_current_time`** —
@@ -158,8 +173,52 @@ main defense against confidently-wrong answers, not a one-off patch.
   a 4GB Pi, running multiple Chromium instances isn't something to build
   toward); in practice this is safe because tool calls execute sequentially,
   never concurrently, within a turn.
+- **`screenshot_desktop`** (`tools/desktop.ts`) — captures the ENTIRE
+  desktop, every window, not just whatever's inside the browser's own tab.
+  Shells out to `grim` (Wayland) or `scrot`/`import` (X11), whichever
+  actually works. Deliberately does **not** gate on `process.env.DISPLAY`/
+  `WAYLAND_DISPLAY` being set and bail out if empty — Caden runs as a
+  systemd service, which does not inherit those vars from an interactive
+  session (local login, or a remote one like Raspberry Pi Connect) even
+  while one is actively running. Instead it tries the env vars if present,
+  then falls back to the near-universal defaults for a Pi's first desktop
+  session (`:0` / `wayland-0`), across both tool families, and only errors
+  once everything's been tried. The Browser tab's live stream
+  (`browser.ts`'s `startStreaming`) calls this on every tick *first*,
+  falling back to a plain Playwright page screenshot only if it fails
+  outright — so the live view shows the real desktop whenever one is
+  reachable, not just the inside of the browser tab.
 - **`remember`** — persists the user's name and durable facts across
   conversations. See Memory above.
+
+## Vision (image input)
+
+Caden can see images two ways: the person attaching one in the web UI (the
+chat input's Attach button, or pasting an image from the clipboard — both go
+through client-side downscaling to ~1400px/JPEG-80% before ever hitting the
+network), and its own screenshots (`screenshot_desktop` / `browser_screenshot`)
+being shown back to it. Both funnel through the same mechanism: a message
+with multimodal `content` — a `{type:"text"}` part plus one or more
+`{type:"image_url", image_url:{url:"data:..."}}` parts, the standard
+OpenAI-style shape.
+
+For tool-returned screenshots specifically: `runAgentTurn` in `agent.ts`
+never leaves the raw base64 sitting in the tool-call result — a giant base64
+string is both wasteful context and useless to a text-only model, which
+can't "see" it there anyway. Instead the tool result gets replaced with a
+small stub (`{ok: true, note: "..."}`) and the actual image is pushed as a
+follow-up `user` message with an `image_url` part, so the model genuinely
+sees it on its next turn. `IMAGE_RESULT_TOOLS` in `agent.ts` is the set of
+tool names this applies to (`screenshot_desktop`, `browser_screenshot`).
+
+Groq's tool-calling models here don't reliably support image input, so
+`providers.ts`'s `llm()` detects any `image_url` content part in the message
+list and routes straight to Gemini (skipping the Groq attempt entirely) —
+Gemini's OpenAI-compatible endpoint handles multimodal input and function
+calling together natively. This means vision requires a working
+`GEMINI_API_KEYS` entry; if there isn't one, `llm()` throws a clear error
+saying so rather than silently falling back to a model that can't see the
+image at all.
 
 ## Key management
 

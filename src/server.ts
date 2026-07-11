@@ -16,7 +16,10 @@ const START_TIME = Date.now();
 
 export function startServer() {
   const app = express();
-  app.use(express.json({ limit: "2mb" }));
+  // 20mb headroom for image attachments (chat uploads + forwarded
+  // screenshots) — the frontend downscales images before sending, but this
+  // still needs enough room for a full base64-encoded photo.
+  app.use(express.json({ limit: "20mb" }));
   app.use(express.static(PUBLIC_DIR));
 
   app.get("/api/status", (_req, res) => {

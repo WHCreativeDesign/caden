@@ -7,16 +7,18 @@
 //            Playwright's headless mode doesn't require Xvfb).
 //   auto   — local if process.env.DISPLAY is set, stream otherwise.
 //
-// Live view: regardless of mode, whenever a page is open and someone's
-// watching the web UI's Browser tab, periodic screenshots stream over
-// /ws/browser — this is what makes the research agent's browsing (search
-// results, the pages it opens to verify a claim, clicks, scrolls) watchable
-// in real time, not just something that happens on an attached monitor you
-// may not be standing in front of. The interval is live-adjustable via
-// setStreamInterval (wired to POST /api/browser/interval).
+// Live view: whenever someone's watching the web UI's Browser tab, periodic
+// screenshots stream over /ws/browser — a screenshot of the WHOLE desktop
+// (every window, not just the browser tab) via screenshotDesktop() in
+// desktop.ts, whether that session is local or remote (e.g. Raspberry Pi
+// Connect); it only falls back to the Playwright page itself when there's no
+// reachable desktop session at all. Either way this is what makes what
+// Caden's doing on the Pi watchable in real time. The interval is
+// live-adjustable via setStreamInterval (wired to POST /api/browser/interval).
 import { chromium, Browser, Page } from "playwright";
 import { EventEmitter } from "node:events";
 import { schema, ToolDef } from "../types.js";
+import { screenshotDesktop } from "./desktop.js";
 
 export const browserEvents = new EventEmitter();
 
@@ -76,15 +78,27 @@ export function removeStreamViewer() {
 
 // A self-rescheduling timeout (not setInterval) so a live interval change
 // takes effect on the very next tick instead of only after restarting.
+//
+// Every tick tries a whole-desktop screenshot first — every window, not just
+// the browser tab, and it works for a local session or a remote one (e.g.
+// Raspberry Pi Connect) since screenshotDesktop() probes rather than trusting
+// env vars a systemd service won't have anyway. Only falls back to the
+// Playwright page itself when that fails outright (truly headless, no
+// reachable session at all) — the one case where there's no desktop to show.
 function startStreaming() {
   if (streamTimer) return;
   const tick = async () => {
     if (streamViewers === 0) { streamTimer = null; return; }
-    if (page) {
-      try {
-        const buf = await page.screenshot({ type: "jpeg", quality: 55 });
-        browserEvents.emit("frame", buf);
-      } catch { /* page mid-navigation, skip this tick */ }
+    try {
+      const { image_base64 } = await screenshotDesktop({ quality: 55 });
+      browserEvents.emit("frame", Buffer.from(image_base64, "base64"));
+    } catch {
+      if (page) {
+        try {
+          const buf = await page.screenshot({ type: "jpeg", quality: 55 });
+          browserEvents.emit("frame", buf);
+        } catch { /* nothing capturable this tick, skip */ }
+      }
     }
     streamTimer = setTimeout(tick, streamIntervalMs);
   };

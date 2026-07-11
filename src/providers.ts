@@ -136,8 +136,27 @@ async function callProvider(provider: "groq" | "gemini", model: string, messages
   throw lastErr ?? new Error(`${provider} exhausted key retries`);
 }
 
+// True if any message carries a multimodal image part (an uploaded photo, or
+// a screenshot forwarded by the agent loop after a screenshot_desktop /
+// browser_screenshot call). Groq's tool-calling text models can't see these;
+// Gemini's OpenAI-compatible endpoint handles image input and function
+// calling together natively, so vision always goes straight there rather
+// than wasting a doomed Groq attempt first.
+function hasImageContent(messages: unknown[]): boolean {
+  return messages.some(
+    (m: any) => Array.isArray(m?.content) && m.content.some((p: any) => p?.type === "image_url"),
+  );
+}
+
 export async function llm(messages: unknown[], profile: string, tools?: ToolSchema[]) {
   const models = MODELS[profile] ?? MODELS[DEFAULT_PROFILE];
+  if (hasImageContent(messages)) {
+    try {
+      return await callProvider("gemini", models.gemini, messages, tools);
+    } catch (geminiErr) {
+      throw new Error(`Vision needs a working Gemini key (image input isn't supported on the Groq models here): ${String(geminiErr)}`);
+    }
+  }
   try {
     return await callProvider("groq", models.groq, messages, tools);
   } catch (groqErr) {

@@ -4,15 +4,37 @@ import { llm } from "./providers.js";
 import { webTools } from "./tools/web.js";
 import { shellTools } from "./tools/shell.js";
 import { browserTools } from "./tools/browser.js";
+import { desktopTools } from "./tools/desktop.js";
 import { agentDispatchTools } from "./tools/agentDispatch.js";
 import { memoryTools, loadMemory, memoryContext } from "./tools/memory.js";
 import { ToolDef, ToolSchema } from "./types.js";
 
 export type AgentName = "caden" | "researcher" | "scout";
 
-const ALL_TOOLS: ToolDef[] = [...webTools, ...shellTools, ...browserTools, ...agentDispatchTools, ...memoryTools];
+const ALL_TOOLS: ToolDef[] = [...webTools, ...shellTools, ...browserTools, ...desktopTools, ...agentDispatchTools, ...memoryTools];
 const TOOL_SCHEMAS: ToolSchema[] = ALL_TOOLS.map((t) => t.schema);
 const TOOL_HANDLERS = new Map(ALL_TOOLS.map((t) => [t.schema.function.name, t.handler]));
+
+// Tools whose result carries a screenshot the model should actually see —
+// runAgentTurn forwards these as a real image content part afterward instead
+// of leaving a giant inert base64 blob sitting in the tool result.
+const IMAGE_RESULT_TOOLS = new Set(["screenshot_desktop", "browser_screenshot"]);
+
+// This Pi is Caden's own machine, not a device it's a guest on — it should
+// never hedge or ask permission before looking at its own screen. This
+// exists because it did exactly that for real: asked to check what's on
+// screen, it tried a few missing CLI tools and then just gave up and said it
+// couldn't tell, instead of using screenshot_desktop or fixing the gap.
+const OWN_MACHINE_BRIEF =
+  "This Raspberry Pi is your own personal computer — not a device you're a " +
+  "guest on. You have full, unrestricted control over the whole machine; " +
+  "that's the deliberate governance model here (total access, backed by an " +
+  "audit log, not a curated allowlist). When asked what's on screen, what's " +
+  "running, or to check something visually, just look: screenshot_desktop " +
+  "shows you the entire desktop — local or a remote session (e.g. " +
+  "Raspberry Pi Connect) — and run_shell can inspect processes or install a " +
+  "missing tool on the spot. Never respond that you 'can't tell' or don't " +
+  "have access — you do; use the tool or fix the gap and try again.";
 
 const CAPABILITIES_BRIEF =
   "When a request actually calls for it, you can act rather than just talk: " +
@@ -20,11 +42,15 @@ const CAPABILITIES_BRIEF =
   "(files, packages, services — anything a shell can do, all logged); " +
   "browser_open/click/type/scroll/drag/read/screenshot/close drive a real " +
   "browser you control, its live view streaming to the web UI's Browser " +
-  "tab so what it's doing is watchable in real time; web_search and " +
-  "fetch_page reach the live web; dispatch_agent runs a focused research " +
-  "sub-task in parallel, with its own browser access to verify firsthand. " +
-  "Reach for these only when they serve the person, and just do the thing " +
-  "— don't announce a tool call before making it or narrate mechanics.";
+  "tab so what it's doing is watchable in real time; screenshot_desktop " +
+  "captures your ENTIRE desktop — every window, not just a browser tab, " +
+  "local or remote session alike; web_search and fetch_page reach the live " +
+  "web; dispatch_agent runs a focused research sub-task in parallel, with " +
+  "its own browser access to verify firsthand. Images the person sends you, " +
+  "and screenshots you take yourself, are shown to you directly afterward — " +
+  "you actually see them, not just a note that a file exists. Reach for " +
+  "these only when they serve the person, and just do the thing — don't " +
+  "announce a tool call before making it or narrate mechanics.";
 
 // A web_search snippet is often stale or subtly wrong (this has bitten Caden
 // for real: a "latest X" question answered straight from a snippet, missing
@@ -68,7 +94,7 @@ const AGENTS: Record<AgentName, { label: string; profile: string; rounds: number
       "who you are, and ask what they'll need from you. Once you know " +
       "someone, use their name naturally and never reintroduce yourself; " +
       "quietly remember durable facts and preferences about them with the " +
-      "remember tool as you learn them. " + CAPABILITIES_BRIEF + " " + ACCURACY_BRIEF,
+      "remember tool as you learn them. " + OWN_MACHINE_BRIEF + " " + CAPABILITIES_BRIEF + " " + ACCURACY_BRIEF,
   },
   researcher: {
     label: "Research",
@@ -82,7 +108,7 @@ const AGENTS: Record<AgentName, { label: string; profile: string; rounds: number
       "trusting snippets; dispatch_agent for independent threads of a " +
       "broad question; cross-check claims and note where sources disagree. " +
       "Then lay out the full findings — brief, confidence, source URLs — " +
-      "clearly organized in your reply. " + CAPABILITIES_BRIEF + " " + ACCURACY_BRIEF,
+      "clearly organized in your reply. " + OWN_MACHINE_BRIEF + " " + CAPABILITIES_BRIEF + " " + ACCURACY_BRIEF,
   },
   scout: {
     label: "Scout",
@@ -167,6 +193,12 @@ export async function runAgentTurn(
 
     workingMessages.push({ role: "assistant", content: msg.content, tool_calls: msg.tool_calls });
 
+    // Screenshots collected this round get forwarded as real image content
+    // after all tool results are in (see below) so the model actually sees
+    // them, instead of a multi-hundred-KB base64 string sitting inert in a
+    // tool message that a text-only model can't interpret anyway.
+    const pendingImages: Array<{ mime: string; base64: string; source: string }> = [];
+
     for (const tc of msg.tool_calls as any[]) {
       const name = tc.function?.name ?? "unknown";
       const rawArgs = tc.function?.arguments ?? "{}";
@@ -178,9 +210,27 @@ export async function runAgentTurn(
       } catch (err) {
         result = { error: String((err as Error).message ?? err) };
       }
-      const resultStr = JSON.stringify(result);
+
+      let resultForModel = result;
+      if (IMAGE_RESULT_TOOLS.has(name) && result && typeof result === "object" && "image_base64" in (result as any)) {
+        const { image_base64, mime, ...rest } = result as any;
+        pendingImages.push({ mime: mime || "image/jpeg", base64: image_base64, source: name });
+        resultForModel = { ...rest, ok: true, note: "captured — the image follows as an attachment you can see" };
+      }
+
+      const resultStr = JSON.stringify(resultForModel);
       steps.push({ tool: name, arguments: clip(rawArgs, 600), result: clip(resultStr, 1200) });
       workingMessages.push({ role: "tool", tool_call_id: tc.id, content: resultStr });
+    }
+
+    for (const img of pendingImages) {
+      workingMessages.push({
+        role: "user",
+        content: [
+          { type: "text", text: `(image from ${img.source})` },
+          { type: "image_url", image_url: { url: `data:${img.mime};base64,${img.base64}` } },
+        ],
+      });
     }
   }
 
