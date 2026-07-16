@@ -5,6 +5,8 @@ import { ToolSchema } from "./types.js";
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GEMINI_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+const WHISPER_MODEL = "whisper-large-v3-turbo";
 
 // groqVision is a separate model id because Groq's everyday tool-calling
 // models (llama-3.3-70b-versatile etc.) don't take image input at all — but
@@ -159,6 +161,34 @@ function hasImageContent(messages: unknown[]): boolean {
   return messages.some(
     (m: any) => Array.isArray(m?.content) && m.content.some((p: any) => p?.type === "image_url"),
   );
+}
+
+// Speech-to-text for Telegram voice notes, via Groq's Whisper endpoint —
+// reuses the exact same key pool as chat rather than needing a separate
+// service/key/dependency. Gemini has no equivalent here, so unlike llm()
+// this has no fallback provider; a failure just surfaces as a transcription
+// error to whoever sent the voice note.
+export async function transcribeAudio(buf: Buffer, filename: string): Promise<string> {
+  const cycler = cyclers.groq;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_KEY_ATTEMPTS; attempt++) {
+    const key = cycler.next();
+    if (!key) throw new Error("no available groq keys");
+    const form = new FormData();
+    form.append("model", WHISPER_MODEL);
+    form.append("file", new Blob([buf as unknown as BlobPart]), filename);
+    const resp = await fetch(GROQ_TRANSCRIBE_URL, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form });
+    if (resp.status === 429) {
+      const retryAfter = Number(resp.headers.get("retry-after")) || 60;
+      cycler.markLimited(key, retryAfter);
+      lastErr = new Error("groq rate-limited (transcription)");
+      continue;
+    }
+    if (!resp.ok) throw new Error(`groq transcription error ${resp.status}: ${await resp.text()}`);
+    const data: any = await resp.json();
+    return data.text ?? "";
+  }
+  throw lastErr ?? new Error("groq exhausted key retries (transcription)");
 }
 
 export async function llm(messages: unknown[], profile: string, tools?: ToolSchema[]) {

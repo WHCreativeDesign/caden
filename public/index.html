@@ -694,6 +694,12 @@
       const n = thinking.length + steps.length;
       if (n) trace.finish(n); else trace.el.remove();
 
+      // The server occasionally compacts a long conversation into a summary
+      // + recent tail to keep token usage down — when it does, it hands
+      // back the shrunken history so every future request stays small too,
+      // instead of the client re-growing it back to full size right after.
+      if (Array.isArray(data.history)) history = data.history;
+
       const reply = data.reply || '(no reply)';
       history.push({ role: 'assistant', content: reply });
       const seconds = ((performance.now() - t0) / 1000).toFixed(1);

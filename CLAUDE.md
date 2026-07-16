@@ -14,9 +14,10 @@ There is no cloud backend and no static hosted frontend anymore — that
 architecture (Supabase Edge Functions + GitHub Pages) was retired. Everything
 lives in this repo and runs on the Pi itself.
 
-Canvas mode and voice mode are cut for now. This is a deliberate scope
-narrowing to focus on the chat experience — a good, transparent, single
-conversational surface — before any of that comes back, if it does.
+Canvas mode is cut for now — a deliberate scope narrowing to focus on the
+chat experience, a good transparent single conversational surface, before
+it comes back, if it does. Voice (SAM TTS reading replies aloud) came back
+— see "Voice (SAM text-to-speech)" below.
 
 ---
 
@@ -53,6 +54,7 @@ src/
   server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/browser, /ws/sfx
   update.ts                   — self-update watcher (git fetch/pull → rebuild → exit; systemd relaunches)
   sfx.ts                        — status SFX: broadcasts + local aplay/paplay playback, synced with the browser
+  telegram.ts                   — Telegram bot channel: text + voice notes, reuses the same agent loop
   tools/
     web.ts                      — web_search, fetch_page, calculate, get_current_time
     shell.ts                     — run_shell + the audit log + the hardcoded deny list
@@ -74,7 +76,8 @@ bin/caden-chat             — thin wrapper exec'ing dist/cli.js; install.sh sym
 systemd/caden.service      — the service unit (Restart=always, WantedBy=multi-user.target)
 scripts/
   vendor-sam.sh             — copies sam-js's browser build into public/vendor/ (re-run after bumping
-                               the sam-js devDependency; not part of npm run build, no bundler here)
+                               the sam-js dependency; not part of npm run build, no bundler here — sam-js
+                               is also used directly from Node by telegram.ts for voice-note replies)
   bootstrap.sh              — the single curl-pipeable installer: clones/updates the repo, then hands
                                off to install.sh (its own `read` prompts go via /dev/tty since the
                                curl|bash pipe consumes stdin — see install.sh's key-entry section)
@@ -99,20 +102,44 @@ exhausted key pool. The TRACE capsule still shows the real tool-call steps
 when a turn actually uses tools; it's just empty for a plain reply now
 instead of narrating a rehearsal of it.
 
-**Retrying through provider outages.** `POST /api/chat` in `server.ts`
+**Retrying through provider outages.** `runAgentTurnRetrying` (`agent.ts`)
 doesn't fail the moment `runAgentTurn` throws — it only throws when *every*
 key across *both* Groq and Gemini is exhausted or erroring (see `llm()` in
 `providers.ts`), which is exactly the transient state a small key pool hits
-under load, not a real bug. So the handler retries silently with backoff
-(`CHAT_RETRY_BASE_MS` 2s, doubling up to `CHAT_RETRY_MAX_MS` 15s) for up to
-`CHAT_RETRY_BUDGET_MS` (3 minutes) before actually giving up — the person
-just sees "working" the whole time, not a string of errors. A non-provider
+under load, not a real bug. So it retries silently with backoff
+(`RETRY_BASE_MS` 2s, doubling up to `RETRY_MAX_MS` 15s) for up to
+`RETRY_BUDGET_MS` (3 minutes) before actually giving up — the person just
+sees "working" the whole time, not a string of errors. A non-provider
 failure (the agent looping past its round cap) is a real limit, not a blip,
-so it's surfaced immediately instead of retried. The retry loop watches
-`req`'s own `close` event as its cancel signal — the web UI's Cancel button
-(next to Send, appears once a request is in flight) aborts its `fetch` via
-an `AbortController`, which closes the connection and stops the loop on its
-next check rather than burning through the rest of its budget pointlessly.
+so it's surfaced immediately instead of retried. It takes an `isCancelled()`
+callback so both callers can hook up their own cancel signal: `server.ts`'s
+`POST /api/chat` watches `req`'s own `close` event — the web UI's Cancel
+button (next to Send, appears once a request is in flight) aborts its
+`fetch` via an `AbortController`, which closes the connection and stops the
+loop on its next check rather than burning through the rest of its budget
+pointlessly. `telegram.ts` (below) uses the same helper with no cancel
+signal — there's no "abort" gesture over Telegram, a reply either arrives
+or the budget runs out.
+
+**Context compaction.** A long conversation resends its entire history
+every single turn — with no ceiling, that's both more tokens per request
+(eating into Groq's per-minute token budget on top of its per-minute
+request budget, part of what was exhausting the key pool) and, eventually,
+a prompt too large to be useful. `compactHistoryIfNeeded` (`agent.ts`) runs
+once per turn before the real call: once the non-system portion of history
+crosses a rough size threshold (`SUMMARY_TRIGGER_CHARS`, ~12,000 chars), it
+folds everything except the last `SUMMARY_KEEP_RECENT` (8) messages into
+one compact system message via a single cheap-model call, and returns the
+shrunken history to the caller. If it *was* already compacted once before
+(tagged by a fixed `SUMMARY_MARKER` prefix), that prior summary is folded
+into the new summarization pass too, rather than silently dropped — each
+compaction is cumulative, not a one-shot loss of everything before the
+first one. `server.ts` sends the compacted `history` back to the web UI in
+the chat response whenever it fired, and the frontend replaces what it's
+storing (and will resend) with it — the summarization cost is paid once,
+not repeated on every subsequent turn. If the summarization call itself
+fails (no providers available), it falls back to the uncompacted history
+rather than losing the turn over it.
 
 **Tone & relationship.** The `caden` persona is deliberately relational, not
 a research terminal: on first contact (see Memory below) it gives a short
@@ -188,6 +215,26 @@ body, so a cited source becomes a clickable link for free. `dispatch_agent`
 browser when a question needs real digging. Keep this discipline in sync
 across `caden`/`researcher`/`scout` if you touch the personas — it's the
 main defense against confidently-wrong answers, not a one-off patch.
+
+## Anti-hallucination discipline (claiming an action without doing it)
+
+This bit Caden for real: asked to create a Gmail account, it described
+having done so — without ever calling `browser_open` or any other tool.
+`ANTI_HALLUCINATION_BRIEF` (`agent.ts`, carried by every persona) is direct
+about this: never say an action in the world happened — an account
+created, a message sent, a form submitted — unless the tool that does it
+was actually called *and* the result was actually seen confirming it (a
+tool result, or `browser_read`/`browser_screenshot` showing the outcome).
+Multi-step tasks like account creation take many small tool calls across
+many rounds — this is also why `caden`'s round cap was raised (10 → 14):
+narrating the steps as already done is not a substitute for making the
+calls. If something real blocks progress (a CAPTCHA, a phone-verification
+wall, a missing selector), the instruction is to say exactly what happened
+and where it got stuck — a believable-sounding success that didn't happen
+is worse than admitting the task isn't finished. Keep this in sync with
+`ACCURACY_BRIEF` above if you touch the personas — the two are companion
+disciplines (don't trust what you didn't verify / don't claim what you
+didn't do).
 
 ## This Pi is Caden's own machine
 
@@ -510,6 +557,49 @@ If none of that fixes it (or the hardware just isn't the onboard
 bcm2835 output), `install.sh` prints `aplay -l`'s card/device list at the
 end of setup — feed the right one into `SFX_AUDIO_DEVICE=plughw:<card>,<device>`
 in `.env`.
+
+## Telegram (remote access from outside the house)
+
+`src/telegram.ts` is a second channel into the exact same agent loop as the
+web UI — so Caden is reachable when you're not on the LAN. Dormant unless
+`TELEGRAM_BOT_TOKEN` is set (`.env.example`); when it is, `startTelegramBot()`
+(called once from `index.ts`) long-polls the Bot API's `getUpdates` rather
+than needing a public HTTPS webhook, since a home Pi behind NAT has neither.
+
+**This is not real phone/video calling, and can't be** — the Telegram Bot
+API has no access to Telegram's actual VOIP calls at all; those are
+end-to-end encrypted client-to-client and never exposed to bots, by
+Telegram's own design, not a limitation of this implementation. The
+feasible (and implemented) equivalent is **voice notes**: send Caden a
+voice message, it transcribes it (Groq Whisper — `transcribeAudio` in
+`providers.ts`, reusing the exact same Groq key pool as chat rather than a
+separate service/key) and replies with both a text message and a
+synthesized voice note (`sam-js`'s `.wav()` method, called directly from
+Node — no DOM/AudioContext needed for this, unlike the browser's TTS —
+sent via `sendAudio` rather than the stricter `sendVoice`, which requires
+actual OGG/Opus and would need an ffmpeg re-encode `sam-js`'s WAV output
+doesn't need otherwise).
+
+**Access control is deny-by-default, deliberately.** This bot has the same
+full, unrestricted shell/browser access as the web UI — an unauthenticated
+Telegram bot would hand a stranger who finds its `@username` a shell on
+your Pi. Only chat IDs listed in `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated)
+are answered at all; anyone else's message is logged to the audit log
+(reusing `auditEvents`, the same SYSTEM LOG channel `run_shell` uses) and
+silently ignored, not replied to with an error that would confirm the bot
+is even listening. There is no auto-adopt-first-sender fallback — an unset
+allowlist means the bot answers no one, on purpose.
+
+Each chat ID gets its own in-memory conversation history (`sessions` map in
+`telegram.ts`), separate from the web UI's — it resets on restart, an
+acceptable trade for single-user hardware that already restarts
+periodically for self-update. It goes through the same
+`compactHistoryIfNeeded` / `runAgentTurnRetrying` helpers `server.ts` uses
+(see Agent loop above), so long Telegram conversations get the same
+context compaction and provider-outage retry behavior as the web UI, not a
+separate reimplementation of either. Always answers as the `caden` persona
+— no mode switching over Telegram (not asked for; keep it simple until it
+is).
 
 ## Key management
 
