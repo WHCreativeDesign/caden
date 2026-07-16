@@ -115,10 +115,22 @@ fi
 # back to the raw ALSA control for images that don't have raspi-config.
 # Non-fatal either way — hardware without this control (USB audio, HATs)
 # just skips it rather than failing the install.
+#
+# Everything audio-related in this section is wrapped in `timeout` on top of
+# the existing `|| true` — this was caught for real hanging the installer
+# indefinitely (never reaching the build/systemd steps below, so the web UI
+# never came up at all): on Raspberry Pi OS Bookworm, audio is routed
+# through PipeWire/WirePlumber, and `raspi-config nonint do_audio` shells
+# out to `pactl`/`wpctl` under the hood, which block waiting for a D-Bus
+# session that doesn't exist when this script runs non-interactively over
+# SSH/curl-pipe (no logged-in graphical session). `|| true` alone only
+# handles a command that returns an error quickly — it does nothing for one
+# that never returns. A timed-out step is treated exactly like an
+# unsupported one: skip it and keep going, don't fail the install over it.
 if command -v raspi-config >/dev/null 2>&1; then
-  run_step "Routing audio to the headphone jack" bash -c "${SUDO} raspi-config nonint do_audio 1 || true"
+  run_step "Routing audio to the headphone jack" bash -c "timeout 10 ${SUDO} raspi-config nonint do_audio 1 || true"
 else
-  run_step "Routing audio to the headphone jack" bash -c "${SUDO} amixer cset numid=3 1 >/dev/null 2>&1 || true"
+  run_step "Routing audio to the headphone jack" bash -c "timeout 10 ${SUDO} amixer cset numid=3 1 >/dev/null 2>&1 || true"
 fi
 
 # Unmute and raise volume — a muted or near-zero mixer is the other common
@@ -126,8 +138,8 @@ fi
 # usual suspects and don't fail the install if none match this hardware.
 run_step "Unmuting and raising volume" bash -c "
   for ctl in Master PCM Speaker Headphone; do
-    amixer sset \"\$ctl\" unmute 100% >/dev/null 2>&1 || true
-    amixer sset \"\$ctl\" 100% >/dev/null 2>&1 || true
+    timeout 5 amixer sset \"\$ctl\" unmute 100% >/dev/null 2>&1 || true
+    timeout 5 amixer sset \"\$ctl\" 100% >/dev/null 2>&1 || true
   done
   true
 "
@@ -136,7 +148,7 @@ run_step "Unmuting and raising volume" bash -c "
 # diagnosable from this output, rather than a mystery after the fact.
 echo ""
 say "Audio devices detected (aplay -l)"
-aplay -l 2>&1 | sed 's/^/  /' || note "aplay -l failed — is a sound card present?"
+timeout 10 aplay -l 2>&1 | sed 's/^/  /' || note "aplay -l failed/timed out — is a sound card present?"
 note "If it's still silent after this, set SFX_AUDIO_DEVICE=plughw:<card>,<device>"
 note "in .env (see .env.example) using the card/device numbers listed above."
 
