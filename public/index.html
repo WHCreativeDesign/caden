@@ -251,10 +251,7 @@
   .log-line.error .tag { color: var(--red); border-color: var(--red); }
   .log-line.running .tag { color: var(--amber); border-color: var(--amber); }
   .log-line .cmd { color: var(--cream); }
-  .log-empty, .browser-note { color: var(--faint); font-size: 12px; letter-spacing: 0.12em; text-align: center; padding: 40px 10px; }
-
-  .browser-scroll { flex: 1; overflow: auto; padding: 12px; display: flex; align-items: flex-start; justify-content: center; min-height: 0; }
-  .browser-scroll img { max-width: 100%; border: 1px solid var(--border); }
+  .log-empty { color: var(--faint); font-size: 12px; letter-spacing: 0.12em; text-align: center; padding: 40px 10px; }
 
   /* Options / debug panel */
   .options-scroll { flex: 1; overflow-y: auto; padding: 16px; min-height: 0; }
@@ -322,7 +319,6 @@
   <nav class="tabs">
     <button class="tab on" id="tabChat"><span class="sq"></span>CHAT</button>
     <button class="tab" id="tabSystem"><span class="sq"></span>SYSTEM</button>
-    <button class="tab" id="tabBrowser"><span class="sq"></span>BROWSER</button>
     <button class="tab" id="tabOptions"><span class="sq"></span>OPTIONS</button>
   </nav>
 
@@ -390,27 +386,6 @@
         <div class="panel-head">SYSTEM LOG <span class="meta up">Shell Activity</span></div>
         <div class="log-scroll" id="logBody">
           <div class="log-empty up" id="logEmpty">No shell activity yet</div>
-        </div>
-      </div>
-
-      <!-- BROWSER -->
-      <div class="panel view hidden" id="viewBrowser">
-        <div class="panel-head">
-          BROWSER
-          <span style="display:flex; align-items:center; gap:10px;">
-            <span class="meta up" id="browserMeta">Idle</span>
-            <select class="sel" id="intervalSelect" aria-label="Screenshot interval" style="width:auto; padding:2px 20px 2px 8px; font-size:10.5px;">
-              <option value="250">250ms</option>
-              <option value="500">500ms</option>
-              <option value="700" selected>700ms</option>
-              <option value="1000">1s</option>
-              <option value="2000">2s</option>
-              <option value="5000">5s</option>
-            </select>
-          </span>
-        </div>
-        <div class="browser-scroll" id="browserView">
-          <div class="browser-note up">Live view connects when this tab is open — streams whatever the browser is doing, whether it's on the Pi's screen or headless</div>
         </div>
       </div>
 
@@ -560,10 +535,9 @@
   const agentSelect = $('agentSelect'), newBtn = $('newBtn'), convMeta = $('convMeta');
   const inputField = $('inputField'), sendBtn = $('sendBtn'), cancelBtn = $('cancelBtn');
   const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachRow = $('attachRow');
-  const tabChat = $('tabChat'), tabSystem = $('tabSystem'), tabBrowser = $('tabBrowser'), tabOptions = $('tabOptions');
-  const viewChat = $('viewChat'), viewSystem = $('viewSystem'), viewBrowser = $('viewBrowser'), viewOptions = $('viewOptions');
-  const logBody = $('logBody'), logEmpty = $('logEmpty'), browserView = $('browserView'), browserMeta = $('browserMeta');
-  const intervalSelect = $('intervalSelect');
+  const tabChat = $('tabChat'), tabSystem = $('tabSystem'), tabOptions = $('tabOptions');
+  const viewChat = $('viewChat'), viewSystem = $('viewSystem'), viewOptions = $('viewOptions');
+  const logBody = $('logBody'), logEmpty = $('logEmpty');
   const linkDot = $('linkDot'), linkText = $('linkText'), sysText = $('sysText');
   const keySeg = $('keySeg');
   const tMainframe = $('tMainframe'), tSha = $('tSha'), tUptime = $('tUptime'), tGroq = $('tGroq'), tGemini = $('tGemini'), tBrowser = $('tBrowser'), tClock = $('tClock');
@@ -855,18 +829,14 @@
   function switchTab(which) {
     tabChat.classList.toggle('on', which === 'chat');
     tabSystem.classList.toggle('on', which === 'system');
-    tabBrowser.classList.toggle('on', which === 'browser');
     tabOptions.classList.toggle('on', which === 'options');
     viewChat.classList.toggle('hidden', which !== 'chat');
     viewSystem.classList.toggle('hidden', which !== 'system');
-    viewBrowser.classList.toggle('hidden', which !== 'browser');
     viewOptions.classList.toggle('hidden', which !== 'options');
-    if (which === 'browser') connectBrowserWs(); else disconnectBrowserWs();
     if (which === 'options') refreshOptions();
   }
   tabChat.addEventListener('click', () => switchTab('chat'));
   tabSystem.addEventListener('click', () => switchTab('system'));
-  tabBrowser.addEventListener('click', () => switchTab('browser'));
   tabOptions.addEventListener('click', () => switchTab('options'));
 
   function wsUrl(path) { return (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + path; }
@@ -888,33 +858,6 @@
     ws.onclose = () => setTimeout(connectLogWs, 3000);
     ws.onerror = () => ws.close();
   }
-
-  let browserWs = null;
-  function connectBrowserWs() {
-    if (browserWs) return;
-    browserView.innerHTML = '<div class="browser-note up">Connecting…</div>';
-    browserWs = new WebSocket(wsUrl('/ws/browser'));
-    browserWs.binaryType = 'blob';
-    browserWs.onmessage = (ev) => {
-      if (typeof ev.data === 'string') return;
-      const url = URL.createObjectURL(ev.data);
-      let img = browserView.querySelector('img');
-      if (!img) { browserView.innerHTML = ''; img = document.createElement('img'); browserView.appendChild(img); }
-      const old = img.src; img.src = url; if (old) URL.revokeObjectURL(old);
-    };
-    browserWs.onclose = () => { browserWs = null; };
-  }
-  function disconnectBrowserWs() {
-    if (browserWs) { browserWs.close(); browserWs = null; }
-    browserView.innerHTML = '<div class="browser-note up">Live view connects when this tab is open — streams whatever the browser is doing, whether it\'s on the Pi\'s screen or headless</div>';
-  }
-
-  intervalSelect.addEventListener('change', () => {
-    fetch('/api/browser/interval', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interval_ms: Number(intervalSelect.value) }),
-    }).catch(() => {});
-  });
 
   // ── Status SFX ──────────────────────────────────────────────────────────
   // The Pi plays these same sounds locally (src/sfx.ts) at the same target
@@ -1273,12 +1216,7 @@
       tGroq.textContent = g.available + '/' + g.total;
       tGemini.textContent = ge.available + '/' + ge.total;
       tBrowser.textContent = (data.browser?.mode ? data.browser.mode + (data.browser.open ? ' · OPEN' : '') : 'IDLE').toUpperCase();
-      browserMeta.textContent = data.browser?.mode ? data.browser.mode + (data.browser.open ? ' · open' : '') : 'idle';
       renderKeySeg(g.available, g.total);
-      if (data.browser?.stream_interval_ms && document.activeElement !== intervalSelect) {
-        const val = String(data.browser.stream_interval_ms);
-        if ([...intervalSelect.options].some((o) => o.value === val)) intervalSelect.value = val;
-      }
       if (data.sfx && !viewOptions.classList.contains('hidden')) {
         optSfxTiming.textContent = 'Lookahead ' + data.sfx.lookahead_ms + 'ms · local compensation ' + data.sfx.local_latency_ms + 'ms (' + data.sfx.local_latency_source + ')';
       }

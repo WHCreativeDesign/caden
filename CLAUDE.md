@@ -51,7 +51,8 @@ src/
   env.ts                 — shared .env loader used by both index.ts and cli.ts
   agent.ts                — the tool-calling agent loop, personas (caden/researcher/scout)
   providers.ts              — Groq/Gemini key cycling (in-memory, single-user — no DB)
-  server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/browser, /ws/sfx
+  server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/sfx
+  activity.ts                 — tracks in-flight chat turns so self-update waits for idle before restarting
   update.ts                   — self-update watcher (git fetch/pull → rebuild → exit; systemd relaunches)
   sfx.ts                        — status SFX: broadcasts + local aplay/paplay playback, synced with the browser
   telegram.ts                   — Telegram bot channel: text + voice notes, reuses the same agent loop
@@ -263,21 +264,14 @@ paper.
   | `local` | `stream`): `local` launches headed on the Pi's attached
   display (needs `DISPLAY` set, i.e. a desktop session); `stream` launches
   true headless (no X server needed at all); `auto` picks based on whether
-  `DISPLAY` is set. **Live view streams to the web UI's Browser tab
-  regardless of mode** — a headed page screenshots just as well as a
-  headless one, so what the browser is doing is watchable in real time
-  whether or not there's a monitor on the Pi. The screenshot interval
-  defaults to `BROWSER_STREAM_INTERVAL_MS` (700ms) and is live-adjustable
-  via `POST /api/browser/interval` (the Browser tab's dropdown does this) —
-  `startStreaming` in `browser.ts` uses a self-rescheduling `setTimeout`
-  rather than `setInterval` specifically so a live interval change takes
-  effect on the next tick, not just after a restart. Frames only get
-  captured while someone's actually watching (`addStreamViewer`/
-  `removeStreamViewer`, wired to `/ws/browser` connect/disconnect).
-  `browser_scroll`'s up/down directions move the mouse into the viewport
-  before calling `page.mouse.wheel()` — without that, wheel events land at
-  the default (0,0) mouse position and silently do nothing; this was caught
-  by an actual live Playwright test, not assumed.
+  `DISPLAY` is set. There used to be a live-view "Browser" tab in the web UI
+  streaming periodic screenshots over `/ws/browser` — cut; `browser_screenshot`
+  still exists as an on-demand tool for a specific look at the page, a
+  different thing from a background live-preview feed. `browser_scroll`'s
+  up/down directions move the mouse into the viewport before calling
+  `page.mouse.wheel()` — without that, wheel events land at the default
+  (0,0) mouse position and silently do nothing; this was caught by an
+  actual live Playwright test, not assumed.
 - **`dispatch_agent`** — a bounded (8-round) sub-agent with the full web
   *and* browser toolset, so it can verify a claim on the actual page rather
   than trusting a search snippet. Returns findings as text for the parent to
@@ -296,11 +290,9 @@ paper.
   while one is actively running. Instead it tries the env vars if present,
   then falls back to the near-universal defaults for a Pi's first desktop
   session (`:0` / `wayland-0`), across both tool families, and only errors
-  once everything's been tried. The Browser tab's live stream
-  (`browser.ts`'s `startStreaming`) calls this on every tick *first*,
-  falling back to a plain Playwright page screenshot only if it fails
-  outright — so the live view shows the real desktop whenever one is
-  reachable, not just the inside of the browser tab.
+  once everything's been tried. Used directly by the `screenshot_desktop`
+  tool; the web UI no longer has a live-view feed to also feed it into
+  (see the browser tools entry above).
 - **`remember`** — persists the user's name and durable facts across
   conversations. See Memory above.
 - **`system_status`** (`tools/system.ts`) — real vitals about the machine
@@ -673,6 +665,23 @@ so `providers.ts` just round-robins comma-separated key lists from
 the **Caden process**, never the Pi. No extra privilege is needed beyond
 what the service already has.
 
+**Waiting for in-flight requests before restarting.** A chat turn can
+legitimately run for minutes now (`runAgentTurnRetrying`'s retry budget in
+`agent.ts`) — restarting the instant a build finished used to call
+`process.exit(0)` with zero regard for that, hard-killing any in-flight
+`/api/chat` (or Telegram) request's connection out from under it. The
+browser surfaces that as a bare `TypeError: Failed to fetch`, with no
+indication anything was actually wrong server-side (this hit for real: SFX
+key pools showed everything healthy, yet chat failed instantly, because
+the failure was a restart racing the request, not a provider problem).
+`src/activity.ts` is a tiny shared counter (`markBusy`/`markIdle`/`isBusy`)
+that both `server.ts`'s `/api/chat` handler and `telegram.ts`'s message
+handler increment/decrement around the agent-turn call; `checkOnce()` in
+`update.ts` checks `isBusy()` after a successful build and waits (polling
+every second, capped at `RESTART_WAIT_CAP_MS`, 4 minutes — a bit longer
+than the chat retry budget) before exiting, rather than restarting straight
+through an active request.
+
 ## Deploying changes
 
 There's no separate "deploy" step to a hosted platform anymore — pushing to
@@ -683,7 +692,12 @@ keys works the same as production.
 
 ## What's not wired up yet
 
-- Auth on the local web UI (LAN-only, single user, no login).
-- Canvas mode and voice mode — deliberately cut this pass.
+- Auth on the local web UI (LAN-only, single user, no login). This matters
+  more than it sounds: `run_shell` gives whoever loads this page full,
+  unrestricted shell access to the Pi. It's a fine tradeoff on a LAN only
+  the household can reach; it stops being fine the moment this UI is made
+  reachable from the public internet (a port-forward, a tunnel, anything
+  that isn't LAN-only) without adding real auth first.
+- Canvas mode — deliberately cut this pass. Voice came back (Gemini TTS).
 - The old stub-only home-automation/Twilio tool ideas from an even earlier
   prototype were never resurrected and aren't planned.

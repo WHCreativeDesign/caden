@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { AgentName, agentLabel, compactHistoryIfNeeded, runAgentTurnRetrying } from "./agent.js";
 import { providerStatus, synthesizeSpeech } from "./providers.js";
 import { auditEvents } from "./tools/shell.js";
-import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval, setModeOverride, closeBrowser } from "./tools/browser.js";
+import { browserStatus, setModeOverride, closeBrowser } from "./tools/browser.js";
 import { updateStatus, setUpdateInterval, checkNow } from "./update.js";
 import { MAINFRAME_VERSION } from "./version.js";
 import { sfxEvents, triggerSfx, sfxStatus, stopThinkingLoop, SfxEvent } from "./sfx.js";
@@ -14,6 +14,7 @@ import { loadMemory, forgetMemory } from "./tools/memory.js";
 import { reminderEvents, listReminders } from "./tools/reminders.js";
 import { weatherConfigStatus, setOpenWeatherApiKey } from "./tools/weather.js";
 import { telegramStatus, setTelegramConfig } from "./telegram.js";
+import { markBusy, markIdle } from "./activity.js";
 
 const SFX_EVENTS: SfxEvent[] = ["sent", "success", "error", "thinking", "reminder", "startup"];
 
@@ -41,12 +42,6 @@ export function startServer() {
       telegram: telegramStatus(),
       weather: weatherConfigStatus(),
     });
-  });
-
-  app.post("/api/browser/interval", (req, res) => {
-    const ms = Number(req.body?.interval_ms);
-    if (!Number.isFinite(ms)) return res.status(400).json({ error: "interval_ms must be a number" });
-    res.json({ interval_ms: setStreamInterval(ms) });
   });
 
   // ── Options / debug panel ────────────────────────────────────────────
@@ -153,6 +148,11 @@ export function startServer() {
     let cancelled = false;
     req.on("close", () => { cancelled = true; });
 
+    // Tells the self-update watcher not to restart out from under this
+    // request — a turn can legitimately run for minutes now (the retry
+    // loop below), and a coincidental restart used to just kill the
+    // connection mid-flight (see activity.ts).
+    markBusy();
     try {
       // Compact a long conversation into a summary + recent tail before
       // spending tokens on it — if it compacted, hand the shrunken history
@@ -167,12 +167,13 @@ export function startServer() {
       if (cancelled) return;
       triggerSfx("error");
       res.status(502).json({ error: String((err as Error).message ?? err) });
+    } finally {
+      markIdle();
     }
   });
 
   const httpServer = createServer(app);
   const logWss = new WebSocketServer({ noServer: true });
-  const browserWss = new WebSocketServer({ noServer: true });
   const sfxWss = new WebSocketServer({ noServer: true });
   const remindersWss = new WebSocketServer({ noServer: true });
 
@@ -180,19 +181,6 @@ export function startServer() {
     const onEntry = (entry: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(entry)); };
     auditEvents.on("entry", onEntry);
     ws.on("close", () => auditEvents.off("entry", onEntry));
-  });
-
-  browserWss.on("connection", (ws: WebSocket) => {
-    addStreamViewer();
-    const onFrame = (buf: Buffer) => { if (ws.readyState === ws.OPEN) ws.send(buf); };
-    const onStatus = (status: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ status })); };
-    browserEvents.on("frame", onFrame);
-    browserEvents.on("status", onStatus);
-    ws.on("close", () => {
-      browserEvents.off("frame", onFrame);
-      browserEvents.off("status", onStatus);
-      removeStreamViewer();
-    });
   });
 
   sfxWss.on("connection", (ws: WebSocket) => {
@@ -211,8 +199,6 @@ export function startServer() {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/ws/log") {
       logWss.handleUpgrade(req, socket, head, (ws) => logWss.emit("connection", ws));
-    } else if (url.pathname === "/ws/browser") {
-      browserWss.handleUpgrade(req, socket, head, (ws) => browserWss.emit("connection", ws));
     } else if (url.pathname === "/ws/sfx") {
       sfxWss.handleUpgrade(req, socket, head, (ws) => sfxWss.emit("connection", ws));
     } else if (url.pathname === "/ws/reminders") {
@@ -221,6 +207,13 @@ export function startServer() {
       socket.destroy();
     }
   });
+
+  // /api/chat can legitimately stay open for the full 3-minute retry
+  // budget with nothing written back until it resolves — Node's own default
+  // request timeout is comfortably above that already, but making it
+  // explicit removes any doubt that Node itself is what's cutting a slow
+  // chat request short.
+  httpServer.requestTimeout = 5 * 60 * 1000;
 
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`[server] Caden listening on http://0.0.0.0:${PORT}`);

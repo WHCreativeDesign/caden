@@ -3,8 +3,18 @@
 // app. This restarts the Caden *process*, never the Pi itself.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { isBusy } from "./activity.js";
 
 const run = promisify(execFile);
+
+// A chat turn (web UI or Telegram) can legitimately run for up to a few
+// minutes now (the retry loop in agent.ts). Restarting the instant a build
+// finishes used to just call process.exit(0) with zero regard for that —
+// hard-killing any in-flight request's connection, which surfaces to the
+// person as a raw "Failed to fetch" with no explanation. Wait for things to
+// go idle first, capped so self-update can't be blocked forever by
+// back-to-back requests on hardware that's otherwise busy nonstop.
+const RESTART_WAIT_CAP_MS = 4 * 60_000;
 
 const BRANCH = process.env.UPDATE_BRANCH || "main";
 const REPO_DIR = process.cwd();
@@ -57,7 +67,16 @@ async function checkOnce(): Promise<void> {
     console.log("[update] installing + building…");
     await run("npm", ["ci"], { cwd: REPO_DIR, timeout: 5 * 60_000 });
     await run("npm", ["run", "build"], { cwd: REPO_DIR, timeout: 5 * 60_000 });
-    console.log("[update] build complete — exiting for systemd to relaunch");
+    console.log("[update] build complete");
+    if (isBusy()) {
+      console.log("[update] a chat turn is in flight — waiting for it before restarting");
+      const waitStart = Date.now();
+      while (isBusy() && Date.now() - waitStart < RESTART_WAIT_CAP_MS) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      if (isBusy()) console.warn("[update] still busy after the wait cap — restarting anyway");
+    }
+    console.log("[update] exiting for systemd to relaunch");
     process.exit(0);
   } catch (err) {
     console.error("[update] check failed:", (err as Error).message ?? err);

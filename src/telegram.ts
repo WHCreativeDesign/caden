@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { compactHistoryIfNeeded, runAgentTurnRetrying } from "./agent.js";
 import { synthesizeSpeech, transcribeAudio } from "./providers.js";
 import { triggerSfx } from "./sfx.js";
+import { markBusy, markIdle } from "./activity.js";
 import { auditEvents } from "./tools/shell.js";
 
 const CONFIG_DIR = join(homedir(), ".caden");
@@ -162,6 +163,10 @@ async function handleMessage(msg: any): Promise<void> {
 
   history.push({ role: "user", content: userText });
   triggerSfx("sent");
+  // Same reason as server.ts's /api/chat: a turn can run for minutes now,
+  // and update.ts's self-update watcher checks this before restarting so a
+  // coincidental restart doesn't kill a reply mid-flight (see activity.ts).
+  markBusy();
   try {
     const { history: nextHistory, compacted } = await compactHistoryIfNeeded(history);
     if (compacted) { history.length = 0; history.push(...nextHistory); }
@@ -173,6 +178,8 @@ async function handleMessage(msg: any): Promise<void> {
   } catch (err) {
     triggerSfx("error");
     await sendText(chatId, "Something went wrong: " + String((err as Error).message ?? err));
+  } finally {
+    markIdle();
   }
 }
 
