@@ -1,0 +1,39 @@
+name: Deploy public/ to GitHub Pages
+
+# Publishes public/ verbatim to GitHub Pages on every push to main that
+# touches it — the exact same index.html the Pi itself serves, so the two
+# never drift out of sync. This only republishes the static file; it does
+# NOT make the GitHub Pages copy able to actually reach the Pi's API/WS
+# endpoints on its own (see the "Remote Access" section in the Options tab
+# and CLAUDE.md's note on this).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "public/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4

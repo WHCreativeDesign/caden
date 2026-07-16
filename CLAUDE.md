@@ -79,6 +79,7 @@ scripts/
                                curl|bash pipe consumes stdin — see install.sh's key-entry section)
   install.sh                 — the real installer: Node.js if missing, deps, Playwright, interactive
                                 key entry, build, systemd install + start. Safe to re-run.
+.github/workflows/pages.yml — republishes public/ to GitHub Pages on push (see "GitHub Pages mirror" below)
 ```
 
 ## Agent loop
@@ -689,6 +690,39 @@ the tracked branch (`main` by default) is the deploy: the Pi picks it up via
 the self-update watcher within one polling interval. For local iteration,
 `npm run dev` (`tsc --watch`) + `npm start` against a `.env` with your own
 keys works the same as production.
+
+## GitHub Pages mirror (static file only — not a second backend)
+
+`.github/workflows/pages.yml` republishes `public/` verbatim to GitHub
+Pages on every push to `main` that touches it, using GitHub's own official
+Pages actions (`configure-pages`/`upload-pages-artifact`/`deploy-pages` —
+no third-party Action). This exists purely so the exact same `index.html`
+is reachable at a stable GitHub Pages URL, always byte-identical to what
+the Pi serves, without hand-copying anything — it does **not** stand up a
+second Caden backend. The Pages copy is 100% static; every `/api/...` and
+`/ws/...` call in it is meaningless without a real Caden process to answer.
+
+**Making the Pages copy actually functional** is what the Options tab's
+Remote Access section (and the `<base id="apiBase">` tag in `<head>`) is
+for: saving a "Caden server address" there sets `<base href>` to that
+origin, and every relative `/api/...`/`/ws/...` reference in the page
+(they all start with `/`) resolves against it instead of the page's own
+origin — `wsUrl()` in `index.html` derives `ws(s)://` from `document.baseURI`
+for the same reason. Left blank (the default), nothing changes — this only
+matters once the Pi is actually reachable from wherever the page is loaded.
+
+**That reachability is the real decision, and it's a significant one.**
+This app has zero authentication (see "What's not wired up yet" below) and
+`run_shell` gives whoever can reach it full shell access to the Pi. Raw
+port-forwarding exposes that, unauthenticated, to the entire public
+internet — trivially discoverable by internet-wide scanners, not just
+"security through obscurity of the port number." Don't wire up port
+forwarding for this without either (a) adding real authentication in front
+of the API first, or (b) using a private-network approach instead (a
+WireGuard/Tailscale-style VPN, or a tunnel like Cloudflare Tunnel) that
+reaches the Pi without exposing any port to the public internet at all.
+This is worth treating as a deliberate, explicit decision, not a quick
+"let me know if I need to port forward" afterthought.
 
 ## What's not wired up yet
 

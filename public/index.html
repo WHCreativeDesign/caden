@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CADEN</title>
+<!-- Overridden at runtime (see the Options tab's Remote Access section) when
+     this exact file is loaded from somewhere other than the Pi itself (e.g.
+     GitHub Pages) — every /api/... and /ws/... reference in this page is a
+     path starting with "/", which a <base href> with a full origin
+     redirects to that origin while leaving the paths themselves untouched.
+     Left as "/" (the default — same as no <base> at all) when served
+     directly by the Pi, so local use is completely unaffected. -->
+<base id="apiBase" href="/">
 <style>
   :root {
     --bg:        #0b0906;
@@ -513,6 +521,21 @@
           </div>
 
           <div class="opt-section">
+            <div class="opt-title up">Remote Access</div>
+            <div class="opt-row">
+              <span class="k">Status<small id="optRemoteStatus">Loading this page directly from the Pi — leave blank</small></span>
+            </div>
+            <div class="opt-row">
+              <span class="k">Caden server address<small>Only needed when this exact page is loaded from somewhere else (e.g. GitHub Pages) and can't reach the Pi at a relative path — e.g. http://&lt;pi-ip-or-hostname&gt;:7777. Reloads the page once saved.</small></span>
+              <span class="ctl">
+                <input type="text" id="optRemoteBase" class="opt-input" placeholder="http://192.168.1.50:7777" autocomplete="off" spellcheck="false">
+                <button class="btn" id="optRemoteSave">Save</button>
+                <button class="btn btn-cancel" id="optRemoteClear">Clear</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="opt-section">
             <div class="opt-title up">Raw Status</div>
             <details>
               <summary style="cursor:pointer; color: var(--dim); font-size:11px; letter-spacing:0.1em;">/api/status</summary>
@@ -529,6 +552,18 @@
 <script>
 (() => {
   'use strict';
+
+  // Must run before anything else fetches or opens a WebSocket — see the
+  // <base id="apiBase"> comment in <head>. A saved server address redirects
+  // every relative /api/... and /ws/... reference in this page to that
+  // origin; left untouched (default "/"), everything behaves exactly as
+  // when this page is served directly by the Pi.
+  const REMOTE_KEY = 'caden.remoteBase';
+  let remoteBase = '';
+  try { remoteBase = localStorage.getItem(REMOTE_KEY) || ''; } catch {}
+  if (remoteBase) {
+    try { document.getElementById('apiBase').href = remoteBase.replace(/\/+$/, '') + '/'; } catch {}
+  }
 
   const $ = (id) => document.getElementById(id);
   const chatScroll = $('chatScroll'), chatInner = $('chatInner'), chatEmpty = $('chatEmpty');
@@ -549,6 +584,7 @@
   const optTelegramStatus = $('optTelegramStatus'), optTelegramToken = $('optTelegramToken'), optTelegramChatIds = $('optTelegramChatIds');
   const optTelegramSaveToken = $('optTelegramSaveToken'), optTelegramClearToken = $('optTelegramClearToken'), optTelegramSaveIds = $('optTelegramSaveIds');
   const optWeatherStatus = $('optWeatherStatus'), optWeatherKey = $('optWeatherKey'), optWeatherSaveKey = $('optWeatherSaveKey'), optWeatherClearKey = $('optWeatherClearKey');
+  const optRemoteStatus = $('optRemoteStatus'), optRemoteBase = $('optRemoteBase'), optRemoteSave = $('optRemoteSave'), optRemoteClear = $('optRemoteClear');
   const toastStack = $('toastStack');
 
   const STORAGE_KEY = 'caden.session.v2';
@@ -839,7 +875,15 @@
   tabSystem.addEventListener('click', () => switchTab('system'));
   tabOptions.addEventListener('click', () => switchTab('options'));
 
-  function wsUrl(path) { return (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + path; }
+  // Derives ws(s):// from wherever <base href> currently points (see the
+  // bootstrap at the top of this script) rather than location.host, so a
+  // configured remote server address applies to WebSocket connections too,
+  // not just fetch().
+  function wsUrl(path) {
+    let base;
+    try { base = new URL(document.baseURI); } catch { base = location; }
+    return (base.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + base.host + path;
+  }
 
   function connectLogWs() {
     const ws = new WebSocket(wsUrl('/ws/log'));
@@ -1137,6 +1181,29 @@
     } catch {}
     optWeatherClearKey.disabled = false;
     refreshOptions();
+  });
+
+  // Purely client-side (localStorage), unlike every other Options section
+  // above — there's no server to persist this to, since it's specifically
+  // what tells this page which server to talk to in the first place.
+  function renderRemoteStatus() {
+    optRemoteStatus.textContent = remoteBase
+      ? 'Pointed at ' + remoteBase
+      : 'Loading this page directly from the Pi — leave blank';
+    optRemoteBase.value = remoteBase;
+  }
+  renderRemoteStatus();
+
+  optRemoteSave.addEventListener('click', () => {
+    const val = optRemoteBase.value.trim();
+    if (!val) return;
+    try { localStorage.setItem(REMOTE_KEY, val); } catch {}
+    location.reload();
+  });
+
+  optRemoteClear.addEventListener('click', () => {
+    try { localStorage.removeItem(REMOTE_KEY); } catch {}
+    location.reload();
   });
 
   async function refreshOptions() {
