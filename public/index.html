@@ -522,6 +522,22 @@
           </div>
 
           <div class="opt-section">
+            <div class="opt-title up">Weather</div>
+            <div class="opt-row">
+              <span class="k">Status<small>Without a key, get_weather still works via wttr.in — a key just upgrades the source</small></span>
+            </div>
+            <div id="optWeatherStatus" class="opt-note">—</div>
+            <div class="opt-row">
+              <span class="k">OpenWeatherMap API key<small>Free at openweathermap.org/api — never shown back once saved</small></span>
+              <span class="ctl">
+                <input type="password" id="optWeatherKey" class="opt-input" placeholder="API key" autocomplete="off" spellcheck="false">
+                <button class="btn" id="optWeatherSaveKey">Save</button>
+                <button class="btn btn-cancel" id="optWeatherClearKey">Clear</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="opt-section">
             <div class="opt-title up">Raw Status</div>
             <details>
               <summary style="cursor:pointer; color: var(--dim); font-size:11px; letter-spacing:0.1em;">/api/status</summary>
@@ -558,6 +574,7 @@
   const optReminderList = $('optReminderList');
   const optTelegramStatus = $('optTelegramStatus'), optTelegramToken = $('optTelegramToken'), optTelegramChatIds = $('optTelegramChatIds');
   const optTelegramSaveToken = $('optTelegramSaveToken'), optTelegramClearToken = $('optTelegramClearToken'), optTelegramSaveIds = $('optTelegramSaveIds');
+  const optWeatherStatus = $('optWeatherStatus'), optWeatherKey = $('optWeatherKey'), optWeatherSaveKey = $('optWeatherSaveKey'), optWeatherClearKey = $('optWeatherClearKey');
   const toastStack = $('toastStack');
 
   const STORAGE_KEY = 'caden.session.v2';
@@ -1152,6 +1169,33 @@
     refreshOptions();
   });
 
+  optWeatherSaveKey.addEventListener('click', async () => {
+    const key = optWeatherKey.value.trim();
+    if (!key) return;
+    optWeatherSaveKey.disabled = true;
+    try {
+      await fetch('/api/weather/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: key }),
+      });
+      optWeatherKey.value = ''; // never redisplayed once saved
+    } catch {}
+    optWeatherSaveKey.disabled = false;
+    refreshOptions();
+  });
+
+  optWeatherClearKey.addEventListener('click', async () => {
+    optWeatherClearKey.disabled = true;
+    try {
+      await fetch('/api/weather/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: '' }),
+      });
+    } catch {}
+    optWeatherClearKey.disabled = false;
+    refreshOptions();
+  });
+
   async function refreshOptions() {
     try {
       const status = await (await fetch('/api/status')).json();
@@ -1171,6 +1215,12 @@
           ? 'Configured (token ' + (t.token_preview || '?') + ') · ' + t.allowed_chat_ids.length + ' allowed chat' + (t.allowed_chat_ids.length === 1 ? '' : 's') + ' · ' + t.active_sessions + ' active session' + (t.active_sessions === 1 ? '' : 's')
           : 'Not configured — add a bot token below';
         if (document.activeElement !== optTelegramChatIds) optTelegramChatIds.value = (t.allowed_chat_ids || []).join(', ');
+      }
+      if (status.weather) {
+        const w = status.weather;
+        optWeatherStatus.textContent = w.has_key
+          ? 'Using OpenWeatherMap (key ' + (w.key_preview || '?') + ')'
+          : 'Using wttr.in (no key set)';
       }
     } catch {}
     try {

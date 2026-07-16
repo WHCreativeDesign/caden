@@ -12,6 +12,7 @@ import { MAINFRAME_VERSION } from "./version.js";
 import { sfxEvents, triggerSfx, sfxStatus, stopThinkingLoop, SfxEvent } from "./sfx.js";
 import { loadMemory, forgetMemory } from "./tools/memory.js";
 import { reminderEvents, listReminders } from "./tools/reminders.js";
+import { weatherConfigStatus, setOpenWeatherApiKey } from "./tools/weather.js";
 import { telegramStatus, setTelegramConfig } from "./telegram.js";
 
 const SFX_EVENTS: SfxEvent[] = ["sent", "success", "error", "thinking", "reminder", "startup"];
@@ -38,6 +39,7 @@ export function startServer() {
       providers: providerStatus(),
       sfx: sfxStatus(),
       telegram: telegramStatus(),
+      weather: weatherConfigStatus(),
     });
   });
 
@@ -123,6 +125,20 @@ export function startServer() {
       ...(allowed_chat_ids !== undefined ? { allowedChatIds: allowed_chat_ids.map(String) } : {}),
     });
     res.json(telegramStatus());
+  });
+
+  // Weather key management (Options tab) — same masked-preview convention
+  // as Telegram's token. Clearing the key (empty string) just drops back to
+  // the no-key wttr.in default rather than breaking the tool.
+  app.get("/api/weather/config", (_req, res) => {
+    res.json(weatherConfigStatus());
+  });
+
+  app.post("/api/weather/config", (req, res) => {
+    const { api_key } = req.body ?? {};
+    if (typeof api_key !== "string") return res.status(400).json({ error: "api_key must be a string" });
+    setOpenWeatherApiKey(api_key);
+    res.json(weatherConfigStatus());
   });
 
   app.post("/api/chat", async (req, res) => {

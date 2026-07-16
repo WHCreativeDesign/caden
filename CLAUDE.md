@@ -166,8 +166,8 @@ otherwise need to SSH in and either edit `.env` + restart, or poke at with
 toggle:
 
 - **Audio** — the SFX On/Off toggle (moved here from the Session panel), a
-  separate Voice (SAM TTS) On/Off toggle, six "test sound" buttons that hit
-  `POST /api/sfx/test {event}` to fire any of the six status sounds
+  separate Voice (Gemini TTS) On/Off toggle, six "test sound" buttons that
+  hit `POST /api/sfx/test {event}` to fire any of the six status sounds
   immediately without needing a real chat turn, and a live readout of the
   current lookahead/compensation values (see Status SFX below).
 - **Browser** — a mode override (`POST /api/browser/mode`) that beats
@@ -187,6 +187,12 @@ toggle:
   greeting flow without editing `~/.caden/memory.json` by hand.
 - **Reminders** — a read-only list of pending reminders (`GET /api/reminders`);
   see Reminders below for how they're set (conversationally) and fire.
+- **Telegram** — see the Telegram section below; the bot token and allowed
+  chat ids can be set, viewed (masked), and cleared here.
+- **Weather** — the OpenWeatherMap API key can be set/cleared here (`GET`/
+  `POST /api/weather/config`); status shows which source `get_weather` is
+  actually using right now (`openweathermap` vs the no-key `wttr.in`
+  default).
 - **Raw Status** — a collapsible `<pre>` of the live `/api/status` payload,
   for whenever the summarized panels aren't enough.
 
@@ -305,9 +311,20 @@ paper.
   text-only tool call is exactly the kind of thing a model otherwise gets
   subtly wrong. Answers "how are you doing" / "are you overheating" for
   real instead of a guess.
-- **`get_weather`** — live conditions for a place via wttr.in's `j1` JSON
+- **`get_weather`** (`tools/weather.ts`) — defaults to wttr.in's `j1` JSON
   endpoint, no API key needed (same "avoid key-gated dependencies where
-  possible" instinct as the DDG-scrape `web_search`). This is itself a live
+  possible" instinct as the DDG-scrape `web_search`). If an OpenWeatherMap
+  key is configured (Options tab's Weather section, or `OPENWEATHER_API_KEY`
+  in `.env` as the first-boot default — same pattern as Telegram's config),
+  that's tried first for more authoritative data and falls back to wttr.in
+  if it ever fails, rather than losing weather entirely over one bad or
+  rate-limited key. `location` accepts a city/place name or `lat,lon` — the
+  latter routes to OpenWeatherMap's `lat`/`lon` params instead of `q`. The
+  returned `source` field is always a plain site URL, never the actual
+  request URL — that one carries the API key in its query string, and
+  `source` gets surfaced straight back through the model's reply
+  (`ACCURACY_BRIEF` has it cite sources as plain text), so leaking the real
+  URL there would leak the key into chat history. This is itself a live
   source, so the persona treats it as authoritative rather than something
   `ACCURACY_BRIEF` demands double-checking via `browser_open`.
 - **`set_reminder` / `list_reminders` / `cancel_reminder`** (`tools/reminders.ts`)
