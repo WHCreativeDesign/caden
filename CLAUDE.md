@@ -90,10 +90,29 @@ Three personas in `agent.ts` — `caden` (a warm, economical personal
 assistant: a sentence or two, no over-explaining, no reciting its own
 features), `researcher` (deep multi-angle research, full findings laid out
 in the reply since there's no canvas to put them in), `scout` (1–3
-sentences, fast model, rarely touches tools). A lightweight "plan" pass
-(`planThinking`) runs a cheap model first to produce a few private reasoning
-lines, shown live in the UI's TRACE capsule before the real answer streams
-in.
+sentences, fast model, rarely touches tools). There used to be a separate
+"plan" pass (`planThinking`) that ran a cheap model first just to produce a
+few private reasoning lines for the UI's TRACE capsule — cut, because it
+doubled the LLM requests every single chat turn made (one on the fast
+model, one on the real one) for a single-user Pi with a small, easily
+exhausted key pool. The TRACE capsule still shows the real tool-call steps
+when a turn actually uses tools; it's just empty for a plain reply now
+instead of narrating a rehearsal of it.
+
+**Retrying through provider outages.** `POST /api/chat` in `server.ts`
+doesn't fail the moment `runAgentTurn` throws — it only throws when *every*
+key across *both* Groq and Gemini is exhausted or erroring (see `llm()` in
+`providers.ts`), which is exactly the transient state a small key pool hits
+under load, not a real bug. So the handler retries silently with backoff
+(`CHAT_RETRY_BASE_MS` 2s, doubling up to `CHAT_RETRY_MAX_MS` 15s) for up to
+`CHAT_RETRY_BUDGET_MS` (3 minutes) before actually giving up — the person
+just sees "working" the whole time, not a string of errors. A non-provider
+failure (the agent looping past its round cap) is a real limit, not a blip,
+so it's surfaced immediately instead of retried. The retry loop watches
+`req`'s own `close` event as its cancel signal — the web UI's Cancel button
+(next to Send, appears once a request is in flight) aborts its `fetch` via
+an `AbortController`, which closes the connection and stops the loop on its
+next check rather than burning through the rest of its budget pointlessly.
 
 **Tone & relationship.** The `caden` persona is deliberately relational, not
 a research terminal: on first contact (see Memory below) it gives a short
@@ -107,7 +126,7 @@ list capabilities.
 
 `src/tools/memory.ts` persists what Caden knows about you across
 conversations in `~/.caden/memory.json` (`{ user_name, first_seen, notes }`).
-Each turn, `runAgentTurn` (and the plan pass) injects a `memoryContext`
+Each turn, `runAgentTurn` injects a `memoryContext`
 system message right after the persona: either "first contact, you don't
 know their name" or "their name is X; you also remember …". The `remember`
 tool writes to it — Caden calls it the moment it learns your name and for

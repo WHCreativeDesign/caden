@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { AgentName, agentLabel, planThinking, runAgentTurn } from "./agent.js";
+import { AgentName, agentLabel, runAgentTurn } from "./agent.js";
 import { providerStatus } from "./providers.js";
 import { auditEvents } from "./tools/shell.js";
 import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval, setModeOverride, closeBrowser } from "./tools/browser.js";
@@ -14,6 +14,22 @@ import { loadMemory, forgetMemory } from "./tools/memory.js";
 import { reminderEvents, listReminders } from "./tools/reminders.js";
 
 const SFX_EVENTS: SfxEvent[] = ["sent", "success", "error", "thinking", "reminder", "startup"];
+
+// A turn only throws when every LLM provider failed (see llm() in
+// providers.ts — both Groq's whole key pool rate-limited and Gemini
+// unavailable) or the agent looped past its round cap. The former is
+// transient — the key pool recovers as soon as a rate-limit window expires —
+// so instead of handing the person an error the instant that happens, retry
+// quietly in the background for a few minutes before actually giving up.
+// The round-cap case is a real limit, not a blip, so it's surfaced right away
+// instead of retried.
+const CHAT_RETRY_BUDGET_MS = 3 * 60 * 1000;
+const CHAT_RETRY_BASE_MS = 2000;
+const CHAT_RETRY_MAX_MS = 15000;
+
+function isProviderFailure(err: unknown): boolean {
+  return String((err as Error)?.message ?? err ?? "").includes("All LLM providers failed");
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, "..", "public");
@@ -95,15 +111,36 @@ export function startServer() {
     if (!Array.isArray(messages)) return res.status(400).json({ error: "`messages` must be an array." });
     const agentName: AgentName = ["caden", "researcher", "scout"].includes(agent) ? agent : "caden";
     triggerSfx("sent");
-    try {
-      const thinking = await planThinking(messages);
-      const planText = thinking.join("\n");
-      const result = await runAgentTurn(messages, agentName, planText);
-      triggerSfx("success");
-      res.json({ agent: agentName, agent_label: agentLabel(agentName), thinking, ...result });
-    } catch (err) {
+
+    // The client's Cancel button aborts its fetch, which closes this
+    // connection — that's the cancel signal: stop retrying the instant it
+    // happens rather than finishing out the backoff budget pointlessly.
+    let cancelled = false;
+    req.on("close", () => { cancelled = true; });
+
+    const startedAt = Date.now();
+    let attempt = 0;
+    let lastErr: unknown;
+    while (!cancelled) {
+      try {
+        const result = await runAgentTurn(messages, agentName);
+        if (cancelled) return;
+        triggerSfx("success");
+        res.json({ agent: agentName, agent_label: agentLabel(agentName), ...result });
+        return;
+      } catch (err) {
+        lastErr = err;
+        const elapsed = Date.now() - startedAt;
+        if (cancelled || !isProviderFailure(err) || elapsed >= CHAT_RETRY_BUDGET_MS) break;
+        const backoff = Math.min(CHAT_RETRY_BASE_MS * 2 ** attempt, CHAT_RETRY_MAX_MS);
+        attempt++;
+        await new Promise((r) => setTimeout(r, Math.min(backoff, CHAT_RETRY_BUDGET_MS - elapsed)));
+      }
+    }
+
+    if (!cancelled) {
       triggerSfx("error");
-      res.status(502).json({ error: String((err as Error).message ?? err) });
+      res.status(502).json({ error: String((lastErr as Error)?.message ?? lastErr) });
     }
   });
 

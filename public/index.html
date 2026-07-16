@@ -158,6 +158,8 @@
   .btn:hover { border-color: var(--dim); }
   .btn-amber { background: var(--amber); color: #000; border-color: var(--amber); font-weight: 700; }
   .btn-amber:hover { background: var(--amber-2); border-color: var(--amber-2); }
+  .btn-cancel { border-color: #c0392b; color: #e0685c; }
+  .btn-cancel:hover { background: #c0392b; color: #000; border-color: #c0392b; }
   .btn:disabled { opacity: 0.4; cursor: default; }
 
   /* Corner-cut model box */
@@ -371,6 +373,7 @@
           <textarea class="input-field" id="inputField" placeholder="Type a message" rows="1"></textarea>
           <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
           <button class="btn" id="attachBtn" title="Attach an image">Attach</button>
+          <button class="btn btn-cancel" id="cancelBtn" title="Stop retrying and cancel this request" style="display:none">Cancel</button>
           <button class="btn btn-amber" id="sendBtn">Send</button>
         </div>
       </div>
@@ -513,7 +516,7 @@
   const $ = (id) => document.getElementById(id);
   const chatScroll = $('chatScroll'), chatInner = $('chatInner'), chatEmpty = $('chatEmpty');
   const agentSelect = $('agentSelect'), newBtn = $('newBtn'), convMeta = $('convMeta');
-  const inputField = $('inputField'), sendBtn = $('sendBtn');
+  const inputField = $('inputField'), sendBtn = $('sendBtn'), cancelBtn = $('cancelBtn');
   const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachRow = $('attachRow');
   const tabChat = $('tabChat'), tabSystem = $('tabSystem'), tabBrowser = $('tabBrowser'), tabOptions = $('tabOptions');
   const viewChat = $('viewChat'), viewSystem = $('viewSystem'), viewBrowser = $('viewBrowser'), viewOptions = $('viewOptions');
@@ -536,6 +539,7 @@
   let history = [];
   let log = [];
   let inFlight = false;
+  let currentController = null; // AbortController for the in-flight /api/chat call, so Cancel can stop it
   let pendingImages = []; // data: URLs, staged for the next send
 
   function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ agent, history, log })); } catch {} }
@@ -656,8 +660,13 @@
     images = images || [];
     if (!prompt && !images.length) return;
     inFlight = true; sendBtn.disabled = true;
-    setSys('WORKING // PROCESSING REQUEST');
+    currentController = new AbortController();
+    cancelBtn.style.display = '';
     const t0 = performance.now();
+    setSys('WORKING // PROCESSING REQUEST');
+    const sysTimer = setInterval(() => {
+      setSys('WORKING // PROCESSING REQUEST (' + Math.floor((performance.now() - t0) / 1000) + 's)');
+    }, 1000);
     const content = images.length
       ? [{ type: 'text', text: prompt || '(see attached image)' }, ...images.map((url) => ({ type: 'image_url', image_url: { url } }))]
       : prompt;
@@ -674,6 +683,7 @@
       const resp = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent, messages: history }),
+        signal: currentController.signal,
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Request failed.');
@@ -696,16 +706,25 @@
       await typewriter(live.body, reply);
     } catch (err) {
       trace.el.remove();
-      const message = String(err.message || err);
-      live.turn.classList.add('error');
-      live.turn.querySelector('.turn-label').textContent = 'CADEN // OFFLINE';
-      live.body.textContent = message;
-      live.metaEl.textContent = 'ERROR';
-      log.push({ role: 'assistant', text: message, err: true, meta: { line: 'ERROR' } });
-      save();
-      speakCaden(message);
+      if (err && err.name === 'AbortError') {
+        // User-initiated cancel, not a failure — drop the pending placeholder
+        // rather than logging it as an error turn.
+        live.turn.remove();
+      } else {
+        const message = String(err.message || err);
+        live.turn.classList.add('error');
+        live.turn.querySelector('.turn-label').textContent = 'CADEN // OFFLINE';
+        live.body.textContent = message;
+        live.metaEl.textContent = 'ERROR';
+        log.push({ role: 'assistant', text: message, err: true, meta: { line: 'ERROR' } });
+        save();
+        speakCaden(message);
+      }
     } finally {
+      clearInterval(sysTimer);
       inFlight = false; sendBtn.disabled = false;
+      cancelBtn.style.display = 'none';
+      currentController = null;
       setSys('ONLINE // AWAITING INPUT');
       scrollChat();
     }
@@ -717,6 +736,7 @@
     ask(v, images);
   }
   sendBtn.addEventListener('click', submit);
+  cancelBtn.addEventListener('click', () => { if (currentController) currentController.abort(); });
   inputField.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } });
   function autoGrow() { inputField.style.height = 'auto'; inputField.style.height = Math.min(140, inputField.scrollHeight) + 'px'; }
   inputField.addEventListener('input', autoGrow);

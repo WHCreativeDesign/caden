@@ -159,33 +159,8 @@ export function agentLabel(name: AgentName): string {
   return AGENTS[name]?.label ?? "Caden";
 }
 
-const PLAN_SYSTEM =
-  "You are the private reasoning process of Caden. Read the conversation and " +
-  "think through the latest message in 3 to 6 terse steps: what is actually " +
-  "being asked, what matters, what to search/check/run, and how to answer. " +
-  "Write only the steps, one per line, each under 15 words, no numbering, " +
-  "and do NOT write the answer itself.";
-
 function clip(s: string, max = 4000): string {
   return s.length > max ? s.slice(0, max) + "…" : s;
-}
-
-export async function planThinking(messages: Array<Record<string, unknown>>): Promise<string[]> {
-  try {
-    const planMessages = [
-      { role: "system", content: PLAN_SYSTEM },
-      { role: "system", content: memoryContext(loadMemory()) },
-      ...messages.filter((m) => m.role !== "system"),
-    ];
-    const response: any = await llm(planMessages, "fast");
-    const text: string = response.choices?.[0]?.message?.content ?? "";
-    return text.split("\n")
-      .map((l: string) => l.replace(/^[\s\-*\d.)]+/, "").trim())
-      .filter(Boolean)
-      .slice(0, 8);
-  } catch {
-    return [];
-  }
 }
 
 export interface AgentStep { tool: string; arguments: string; result: string }
@@ -194,7 +169,6 @@ export interface AgentTurnResult { reply: string; steps: AgentStep[]; rounds: nu
 export async function runAgentTurn(
   history: Array<Record<string, unknown>>,
   agentName: AgentName,
-  plan?: string,
 ): Promise<AgentTurnResult> {
   const agent = AGENTS[agentName] ?? AGENTS.caden;
   const workingMessages = [...history] as Array<Record<string, unknown>>;
@@ -202,18 +176,11 @@ export async function runAgentTurn(
     workingMessages.unshift({ role: "system", content: agent.system });
   }
   // Memory sits right after the persona so what Caden knows about the person
-  // frames everything else, then any reminders that just came due. Plan (if
-  // any) follows.
+  // frames everything else, then any reminders that just came due.
   let insertAt = 1;
   workingMessages.splice(insertAt++, 0, { role: "system", content: memoryContext(loadMemory()) });
   const reminders = reminderContext();
   if (reminders) workingMessages.splice(insertAt++, 0, { role: "system", content: reminders });
-  if (plan?.trim()) {
-    workingMessages.splice(insertAt++, 0, {
-      role: "system",
-      content: "Your prior thinking on the latest message:\n" + clip(plan, 1500) + "\nBuild on it; do not restate it verbatim.",
-    });
-  }
 
   const steps: AgentStep[] = [];
   let announcedThinking = false;
