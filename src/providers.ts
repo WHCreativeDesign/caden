@@ -7,6 +7,19 @@ const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GEMINI_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const WHISPER_MODEL = "whisper-large-v3-turbo";
+const GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
+// gemini-3.1-flash-tts-preview is the current Gemini TTS model (public
+// preview, launched April 2026) via the newer Interactions API — the older
+// gemini-2.5-flash-preview-tts/generateContent shape is now documented as
+// "legacy". Groq's vision-model deprecation earlier taught the same lesson
+// this API surface already learned once: check the current model/endpoint
+// rather than assuming a remembered one still works.
+const GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview";
+// One of Google's deeper, clearer prebuilt voices — not scientifically
+// verified against a real ear in this sandbox (no audio hardware here), so
+// this is a starting pick, not a final judgment; swap via GEMINI_TTS_VOICE
+// if it doesn't land right. Other options: Puck, Kore, Fenrir, Orus, Iapetus.
+const DEFAULT_TTS_VOICE = "Charon";
 
 // groqVision is a separate model id because Groq's everyday tool-calling
 // models (llama-3.3-70b-versatile etc.) don't take image input at all — but
@@ -189,6 +202,83 @@ export async function transcribeAudio(buf: Buffer, filename: string): Promise<st
     return data.text ?? "";
   }
   throw lastErr ?? new Error("groq exhausted key retries (transcription)");
+}
+
+// Gemini's TTS returns raw headerless PCM (mime type like
+// "audio/l16; rate=24000; channels=1") — wrap it in a real WAV header so
+// every downstream consumer (the browser's decodeAudioData, Telegram's
+// sendAudio) can treat it as an ordinary playable file rather than needing
+// to know it's raw samples.
+function pcmToWav(pcm: Buffer, sampleRate: number, channels: number, bitsPerSample: number): Buffer {
+  const blockAlign = channels * (bitsPerSample / 8);
+  const byteRate = sampleRate * blockAlign;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+// Parses "audio/l16; rate=24000; channels=1" style mime types down to the
+// numbers pcmToWav needs, with sane fallbacks if a field is ever missing.
+function parsePcmMime(mime: string): { sampleRate: number; channels: number } {
+  const rate = Number(/rate=(\d+)/.exec(mime)?.[1]) || 24000;
+  const channels = Number(/channels=(\d+)/.exec(mime)?.[1]) || 1;
+  return { sampleRate: rate, channels };
+}
+
+// Text-to-speech via Gemini's Interactions API, reusing the same
+// GEMINI_API_KEYS pool as chat rather than a separate service/key. No
+// fallback provider — Groq doesn't offer TTS, so a failure here just
+// surfaces as "couldn't speak that" to whoever's waiting on it.
+export async function synthesizeSpeech(text: string): Promise<Buffer> {
+  const voice = process.env.GEMINI_TTS_VOICE || DEFAULT_TTS_VOICE;
+  const cycler = cyclers.gemini;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_KEY_ATTEMPTS; attempt++) {
+    const key = cycler.next();
+    if (!key) throw new Error("no available gemini keys");
+    const resp = await fetch(GEMINI_INTERACTIONS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        model: GEMINI_TTS_MODEL,
+        // "Caden" said plainly sometimes got mispronounced by the old SAM
+        // engine's crude reciter rules ("CAD-en"); respelling it "Kayden"
+        // fixed that and costs nothing here even with a competent neural
+        // voice, since "Kayden" is itself a common name said the same way
+        // ("KAY-den") — cheap insurance, not a known Gemini bug.
+        input: text.replace(/\bcaden\b/gi, "Kayden"),
+        response_modalities: ["audio"],
+        speech_config: { voice },
+      }),
+    });
+    if (resp.status === 429) {
+      const retryAfter = Number(resp.headers.get("retry-after")) || 60;
+      cycler.markLimited(key, retryAfter);
+      lastErr = new Error("gemini rate-limited (tts)");
+      continue;
+    }
+    if (!resp.ok) throw new Error(`gemini tts error ${resp.status}: ${await resp.text()}`);
+    const data: any = await resp.json();
+    const part = (data.steps ?? [])
+      .flatMap((s: any) => s.content ?? [])
+      .find((c: any) => c.inline_data)?.inline_data;
+    if (!part?.data) throw new Error("gemini tts response had no audio data");
+    const { sampleRate, channels } = parsePcmMime(part.mime_type || "");
+    return pcmToWav(Buffer.from(part.data, "base64"), sampleRate, channels, 16);
+  }
+  throw lastErr ?? new Error("gemini exhausted key retries (tts)");
 }
 
 export async function llm(messages: unknown[], profile: string, tools?: ToolSchema[]) {

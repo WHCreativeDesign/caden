@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { AgentName, agentLabel, compactHistoryIfNeeded, runAgentTurnRetrying } from "./agent.js";
-import { providerStatus } from "./providers.js";
+import { providerStatus, synthesizeSpeech } from "./providers.js";
 import { auditEvents } from "./tools/shell.js";
 import { browserEvents, browserStatus, addStreamViewer, removeStreamViewer, setStreamInterval, setModeOverride, closeBrowser } from "./tools/browser.js";
 import { updateStatus, setUpdateInterval, checkNow } from "./update.js";
@@ -12,7 +12,7 @@ import { MAINFRAME_VERSION } from "./version.js";
 import { sfxEvents, triggerSfx, sfxStatus, stopThinkingLoop, SfxEvent } from "./sfx.js";
 import { loadMemory, forgetMemory } from "./tools/memory.js";
 import { reminderEvents, listReminders } from "./tools/reminders.js";
-import { telegramStatus } from "./telegram.js";
+import { telegramStatus, setTelegramConfig } from "./telegram.js";
 
 const SFX_EVENTS: SfxEvent[] = ["sent", "success", "error", "thinking", "reminder", "startup"];
 
@@ -90,6 +90,39 @@ export function startServer() {
 
   app.get("/api/reminders", (_req, res) => {
     res.json({ reminders: listReminders() });
+  });
+
+  // Speaks Caden's reply via Gemini's TTS (see synthesizeSpeech in
+  // providers.ts) and hands back a real .wav file rather than base64-in-JSON
+  // — the browser just fetch()es it and decodeAudioData()s the response
+  // body directly.
+  app.post("/api/tts", async (req, res) => {
+    const text = String(req.body?.text ?? "").trim();
+    if (!text) return res.status(400).json({ error: "`text` must be a non-empty string" });
+    try {
+      const wav = await synthesizeSpeech(text);
+      res.setHeader("Content-Type", "audio/wav");
+      res.send(wav);
+    } catch (err) {
+      res.status(502).json({ error: String((err as Error).message ?? err) });
+    }
+  });
+
+  // Telegram key management (Options tab) — see CLAUDE.md's Telegram
+  // section. GET never returns the raw token, only a masked preview.
+  app.get("/api/telegram/config", (_req, res) => {
+    res.json(telegramStatus());
+  });
+
+  app.post("/api/telegram/config", (req, res) => {
+    const { token, allowed_chat_ids } = req.body ?? {};
+    if (token !== undefined && typeof token !== "string") return res.status(400).json({ error: "token must be a string" });
+    if (allowed_chat_ids !== undefined && !Array.isArray(allowed_chat_ids)) return res.status(400).json({ error: "allowed_chat_ids must be an array" });
+    setTelegramConfig({
+      ...(token !== undefined ? { token } : {}),
+      ...(allowed_chat_ids !== undefined ? { allowedChatIds: allowed_chat_ids.map(String) } : {}),
+    });
+    res.json(telegramStatus());
   });
 
   app.post("/api/chat", async (req, res) => {

@@ -70,14 +70,9 @@ public/
                               (amber industrial-terminal look — "Domestic Agent System")
   sfx/*.wav                — synthesized status sounds (sent/success/error/thinking/reminder/startup),
                               served statically and also played locally on the Pi by src/sfx.ts
-  vendor/samjs.min.js      — SAM (Software Automatic Mouth) TTS engine, vendored locally (see
-                              scripts/vendor-sam.sh) — no CDN dependency, same as the SFX assets
 bin/caden-chat             — thin wrapper exec'ing dist/cli.js; install.sh symlinks it to /usr/local/bin
 systemd/caden.service      — the service unit (Restart=always, WantedBy=multi-user.target)
 scripts/
-  vendor-sam.sh             — copies sam-js's browser build into public/vendor/ (re-run after bumping
-                               the sam-js dependency; not part of npm run build, no bundler here — sam-js
-                               is also used directly from Node by telegram.ts for voice-note replies)
   bootstrap.sh              — the single curl-pipeable installer: clones/updates the repo, then hands
                                off to install.sh (its own `read` prompts go via /dev/tty since the
                                curl|bash pipe consumes stdin — see install.sh's key-entry section)
@@ -496,36 +491,55 @@ with zero further calls — and in a real headless browser, the
 `AudioBufferSourceNode` was confirmed to start with `loop=true` and receive
 an explicit `.stop()` call the instant a `success` event arrived.
 
-## Voice (SAM text-to-speech)
+## Voice (Gemini text-to-speech)
 
-Caden's replies are read aloud by SAM (Software Automatic Mouth) — a
-vanilla-JS port of the actual 1982 C64 TTS engine (`sam-js` on npm,
-zero dependencies), vendored locally via `scripts/vendor-sam.sh` into
-`public/vendor/samjs.min.js` (no CDN, same philosophy as everything else
-self-contained in this app). `ask()` in `index.html` calls `speakCaden()`
-right as a reply/error arrives, alongside the typewriter animation — the
-two aren't word-synced, they just start together.
+Caden's replies are read aloud via Gemini's TTS — `synthesizeSpeech` in
+`providers.ts` calls the Interactions API
+(`POST https://generativelanguage.googleapis.com/v1beta/interactions`,
+model `gemini-3.1-flash-tts-preview`, `x-goog-api-key` header) with
+`response_modalities: ["audio"]` and `speech_config: { voice }`, reusing
+the exact same `GEMINI_API_KEYS` pool as chat rather than a separate
+key/service. The response is raw headerless PCM (`audio/l16; rate=24000;
+channels=1` — no WAV container), so `synthesizeSpeech` wraps it in a real
+WAV header (`pcmToWav`) before handing it back, so every consumer can treat
+it as an ordinary playable file. Voice defaults to `Charon`, overridable
+with `GEMINI_TTS_VOICE` in `.env` (other options: Puck, Kore, Fenrir, Orus,
+Iapetus — this hasn't been judged against a real ear in this sandbox, so
+treat the default as a starting pick, not a final one).
 
-**The "Kayden" pronunciation fix.** SAM's reciter treats "Caden" as an
-ordinary word and phonemicizes it wrong (`KAEDEHN` — "CAD-en"). Respelling
-it "Kayden" before it ever reaches SAM fixes this (`KEY5DEHN` — correct
-"KAY-den") — verified directly against `SamJs.convert()`'s actual phoneme
-output for both spellings, not assumed. `ttsText()` in `index.html` does a
-plain case-insensitive `\bcaden\b` → `Kayden` substitution on the text
-handed to `speakCaden()` only — what's actually displayed in the chat is
-untouched.
+This replaced an earlier local engine (SAM, a vanilla-JS port of the 1982
+C64 TTS chip) after deciding a cloud neural voice was worth the tradeoff of
+a per-reply network call — SAM's `sam-js` dependency, `scripts/vendor-sam.sh`,
+and `public/vendor/samjs.min.js` were removed entirely rather than left
+around unused once both call sites (web UI, Telegram) moved to Gemini.
 
-A new `speakCaden()` call aborts whatever SAM utterance is still in flight
-first (`currentSpeech.abort()`) so a fast follow-up message doesn't overlap
-garbled speech with the previous reply. TTS has its own On/Off toggle in
-the Options tab (`localStorage`-persisted, independent of the status SFX
-toggle) — turning it off also aborts anything currently speaking.
+**Web UI:** `POST /api/tts { text }` (`server.ts`) calls `synthesizeSpeech`
+and returns the WAV bytes directly as the response body
+(`Content-Type: audio/wav`) rather than base64-in-JSON — `speakCaden()` in
+`index.html` `fetch()`es it, `audioCtx.decodeAudioData()`s the response,
+and plays it through the same `AudioContext` the status-SFX system already
+unlocks on the first Send click (`ensureAudioCtx`). Synthesis + decode is
+async, so a fast follow-up message (or muting TTS mid-flight) could
+otherwise race and overlap two replies — each `speakCaden()` call is
+tagged with an incrementing `speechRequestId` and a stale response is
+dropped rather than played. TTS has its own On/Off toggle in the Options
+tab (`localStorage`-persisted, independent of the status SFX toggle) —
+turning it off calls `stopSpeech()`, which stops whatever's currently
+playing via the `AudioBufferSourceNode`'s own `.stop()`.
 
-Requires `aplay` (alsa-utils) or `paplay` (pulseaudio-utils) on the Pi —
-`install.sh` installs both. The web UI has an SFX On/Off toggle
-(`localStorage`-persisted) in the Options tab; audio only starts once
-unlocked by a genuine user gesture (the Send button / Enter key), per
-browser autoplay policy.
+**Telegram:** `sendVoiceReply` in `telegram.ts` calls the same
+`synthesizeSpeech` directly from Node (no browser involved) and posts the
+resulting WAV via `sendAudio` (see the Telegram section below).
+
+**The "Kayden" pronunciation note.** The old SAM engine's crude reciter
+rules mispronounced "Caden" as "CAD-en", so `speakCaden`/`sendVoiceReply`'s
+text got a `\bcaden\b` → `Kayden` respelling before reaching the TTS
+engine. That respelling now happens once, inside `synthesizeSpeech` itself
+(so both callers get it for free) — kept as cheap, harmless insurance for
+Gemini's voice too, since "Kayden" is itself a common name said the same
+way ("KAY-den"), not because Gemini is known to have the same bug SAM did.
+If it turns out Gemini already says "Caden" correctly on its own, this can
+be dropped; nothing currently confirms it needs to be.
 
 **Troubleshooting no sound from the Pi's speaker/headphone jack.**
 `playLocal()` in `sfx.ts` used to swallow every failure silently — total
@@ -561,10 +575,10 @@ in `.env`.
 ## Telegram (remote access from outside the house)
 
 `src/telegram.ts` is a second channel into the exact same agent loop as the
-web UI — so Caden is reachable when you're not on the LAN. Dormant unless
-`TELEGRAM_BOT_TOKEN` is set (`.env.example`); when it is, `startTelegramBot()`
-(called once from `index.ts`) long-polls the Bot API's `getUpdates` rather
-than needing a public HTTPS webhook, since a home Pi behind NAT has neither.
+web UI — so Caden is reachable when you're not on the LAN. Dormant unless a
+bot token is configured (see key management below); when it is,
+`startTelegramBot()` long-polls the Bot API's `getUpdates` rather than
+needing a public HTTPS webhook, since a home Pi behind NAT has neither.
 
 **This is not real phone/video calling, and can't be** — the Telegram Bot
 API has no access to Telegram's actual VOIP calls at all; those are
@@ -574,21 +588,47 @@ feasible (and implemented) equivalent is **voice notes**: send Caden a
 voice message, it transcribes it (Groq Whisper — `transcribeAudio` in
 `providers.ts`, reusing the exact same Groq key pool as chat rather than a
 separate service/key) and replies with both a text message and a
-synthesized voice note (`sam-js`'s `.wav()` method, called directly from
-Node — no DOM/AudioContext needed for this, unlike the browser's TTS —
-sent via `sendAudio` rather than the stricter `sendVoice`, which requires
-actual OGG/Opus and would need an ffmpeg re-encode `sam-js`'s WAV output
-doesn't need otherwise).
+synthesized voice note (`synthesizeSpeech` in `providers.ts` — the same
+Gemini TTS the web UI uses, called directly from Node, no browser
+involved) sent via `sendAudio` rather than the stricter `sendVoice`, which
+requires actual OGG/Opus and would need an ffmpeg re-encode the plain WAV
+`synthesizeSpeech` returns doesn't need otherwise.
 
 **Access control is deny-by-default, deliberately.** This bot has the same
 full, unrestricted shell/browser access as the web UI — an unauthenticated
 Telegram bot would hand a stranger who finds its `@username` a shell on
-your Pi. Only chat IDs listed in `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated)
-are answered at all; anyone else's message is logged to the audit log
-(reusing `auditEvents`, the same SYSTEM LOG channel `run_shell` uses) and
-silently ignored, not replied to with an error that would confirm the bot
-is even listening. There is no auto-adopt-first-sender fallback — an unset
-allowlist means the bot answers no one, on purpose.
+your Pi. Only chat IDs in the allowlist are answered at all; anyone else's
+message is logged to the audit log (reusing `auditEvents`, the same SYSTEM
+LOG channel `run_shell` uses) and silently ignored, not replied to with an
+error that would confirm the bot is even listening. There is no
+auto-adopt-first-sender fallback — an unset allowlist means the bot
+answers no one, on purpose.
+
+**Key management (Options tab).** `TELEGRAM_BOT_TOKEN` /
+`TELEGRAM_ALLOWED_CHAT_IDS` in `.env` are only the first-boot default —
+`GET`/`POST /api/telegram/config` (`server.ts`) back a Telegram section in
+the Options tab that lets the token and allowlist be set, viewed, and
+changed from the website itself, no SSH/`.env`-editing/restart needed.
+`setTelegramConfig` (`telegram.ts`) persists to `~/.caden/telegram.json`
+(same pattern as `memory.ts`/`reminders.ts`) and applies immediately: it
+stops whatever's currently polling and restarts with the new config. A
+changed token means a different bot's update stream, so its `pollOffset`
+means nothing and gets reset; a changed allowlist alone doesn't need that.
+`GET` never returns the raw token, only a masked preview
+(`token_preview: "••••<last 4 chars>"`) — the Options tab's own token
+input is `type="password"` and is cleared immediately after a successful
+save rather than ever redisplaying what was typed.
+
+Stopping and immediately restarting polling on a reconfigure has a real
+race to avoid: the *old* loop's in-flight `getUpdates` call (up to its 30s
+long-poll timeout) is still pending when this happens, and a plain boolean
+flag flipped false-then-true-again would let it revive itself the moment
+that call resolves and it rechecks the flag — two loops now racing on the
+same `pollOffset`. `telegram.ts` uses a `generation` counter instead: each
+loop iteration is bound to the generation it started with, so
+`stopTelegramBot()`/`startTelegramBot()` incrementing it makes any older
+loop's check fail for good, however long its last in-flight call takes to
+return, rather than a boolean that can flip back true underneath it.
 
 Each chat ID gets its own in-memory conversation history (`sessions` map in
 `telegram.ts`), separate from the web UI's — it resets on restart, an

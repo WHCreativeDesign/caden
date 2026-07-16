@@ -11,23 +11,62 @@
 // dependency" instinct as web_search's DDG-scrape and get_weather's
 // wttr.in call). Long-polls getUpdates rather than needing a public
 // webhook/HTTPS endpoint, since a home Pi behind NAT has neither.
-import SamJs from "sam-js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { compactHistoryIfNeeded, runAgentTurnRetrying } from "./agent.js";
-import { transcribeAudio } from "./providers.js";
+import { synthesizeSpeech, transcribeAudio } from "./providers.js";
 import { triggerSfx } from "./sfx.js";
 import { auditEvents } from "./tools/shell.js";
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const API = TOKEN ? `https://api.telegram.org/bot${TOKEN}` : null;
-const FILE_API = TOKEN ? `https://api.telegram.org/file/bot${TOKEN}` : null;
+const CONFIG_DIR = join(homedir(), ".caden");
+const CONFIG_FILE = join(CONFIG_DIR, "telegram.json");
 
-// Deny-by-default: this bot has the SAME full shell/browser access as the
-// web UI, so an unauthenticated Telegram bot would hand that to anyone who
-// finds the bot's @username. Only chat IDs listed here are answered at all;
-// everything else is logged to the audit log and silently ignored.
-const ALLOWED = new Set(
-  (process.env.TELEGRAM_ALLOWED_CHAT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
-);
+interface TelegramConfig { token: string; allowedChatIds: string[] }
+
+// Same pattern as tools/memory.ts and tools/reminders.ts: a small JSON file
+// under ~/.caden. .env values are the fallback/first-boot default so an
+// existing .env-based setup keeps working untouched; once the Options tab
+// saves a config here, this file wins from then on — it's the whole point
+// of a "manage from the website" page instead of editing .env + restarting.
+function loadConfig(): TelegramConfig {
+  try {
+    if (existsSync(CONFIG_FILE)) {
+      const raw = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));
+      return {
+        token: typeof raw.token === "string" ? raw.token : "",
+        allowedChatIds: Array.isArray(raw.allowedChatIds) ? raw.allowedChatIds.map(String) : [],
+      };
+    }
+  } catch {
+    // corrupt/unreadable config file — fall through to .env defaults below
+  }
+  return {
+    token: process.env.TELEGRAM_BOT_TOKEN || "",
+    allowedChatIds: (process.env.TELEGRAM_ALLOWED_CHAT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+  };
+}
+
+function persistConfig(cfg: TelegramConfig): void {
+  mkdirSync(CONFIG_DIR, { recursive: true });
+  writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+}
+
+let config = loadConfig();
+// API/FILE_API/ALLOWED are derived from `config` and recomputed by
+// applyConfig() — read at call time by the functions below, not captured,
+// so a live config change takes effect on the very next request rather
+// than needing a process restart.
+let API: string | null = null;
+let FILE_API: string | null = null;
+let ALLOWED = new Set<string>();
+
+function applyConfig(): void {
+  API = config.token ? `https://api.telegram.org/bot${config.token}` : null;
+  FILE_API = config.token ? `https://api.telegram.org/file/bot${config.token}` : null;
+  ALLOWED = new Set(config.allowedChatIds);
+}
+applyConfig();
 
 // Per-chat conversation history, in-memory only (mirrors the web UI's
 // per-browser localStorage history, just server-side) — resets on restart,
@@ -38,14 +77,6 @@ function sessionFor(chatId: number): Array<Record<string, unknown>> {
   let s = sessions.get(chatId);
   if (!s) { s = []; sessions.set(chatId, s); }
   return s;
-}
-
-// Same "Caden" → "Kayden" phonetic fix as the web UI's SAM voice (see
-// public/index.html's ttsText) — SAM's reciter mispronounces "Caden" as
-// "CAD-en" otherwise. Small enough not to be worth sharing a module between
-// a browser-inlined script and this Node file for one regex.
-function ttsText(text: string): string {
-  return text.replace(/\bcaden\b/gi, "Kayden");
 }
 
 async function tgCall(method: string, body?: Record<string, unknown>): Promise<any> {
@@ -70,12 +101,11 @@ async function sendText(chatId: number, text: string): Promise<void> {
 }
 
 // sendVoice (the round "voice message" bubble) requires actual OGG/Opus —
-// sam-js produces WAV, so this sends a regular audio attachment instead
-// (sendAudio), which accepts WAV/MP3 without needing an ffmpeg re-encode.
+// synthesizeSpeech returns WAV, so this sends a regular audio attachment
+// instead (sendAudio), which accepts WAV without needing an ffmpeg re-encode.
 async function sendVoiceReply(chatId: number, text: string): Promise<void> {
   try {
-    const sam = new SamJs({ speed: 72, pitch: 64, mouth: 128, throat: 128 });
-    const wav = sam.wav(ttsText(text));
+    const wav = await synthesizeSpeech(text);
     const form = new FormData();
     form.append("chat_id", String(chatId));
     form.append("audio", new Blob([wav as unknown as BlobPart], { type: "audio/wav" }), "caden.wav");
@@ -105,7 +135,7 @@ async function handleMessage(msg: any): Promise<void> {
       command: `telegram: message from unauthorized chat ${chatId}`,
       cwd: "telegram",
       status: "error",
-      output: "chat id is not in TELEGRAM_ALLOWED_CHAT_IDS — ignored. Add it to .env to authorize this chat.",
+      output: "chat id is not authorized — ignored. Add it in the Options tab (or TELEGRAM_ALLOWED_CHAT_IDS in .env).",
     });
     return;
   }
@@ -146,18 +176,30 @@ async function handleMessage(msg: any): Promise<void> {
   }
 }
 
-let polling = false;
+// `generation` (not just a boolean) is what actually makes stop-then-start
+// safe: a reconfigure calls stopTelegramBot() immediately followed by
+// startTelegramBot(), but the OLD loop's in-flight getUpdates call (up to
+// its 30s long-poll timeout) is still pending when that happens. A plain
+// boolean flipped false-then-true-again would let that stale loop revive
+// itself the moment its pending call resolves and it rechecks the flag —
+// two loops now racing on `pollOffset`. Binding each loop to the
+// generation it was started with means the old one's check fails for good
+// once a newer generation exists, however long its last call takes to
+// return.
+let generation = 0;
 let pollOffset = 0;
 
-async function pollLoop(): Promise<void> {
-  while (polling) {
+async function pollLoop(myGeneration: number): Promise<void> {
+  while (generation === myGeneration) {
     try {
       const updates = await tgCall("getUpdates", { offset: pollOffset, timeout: 30 });
       for (const u of updates) {
+        if (generation !== myGeneration) break; // superseded mid-batch — stop touching shared state
         pollOffset = u.update_id + 1;
         if (u.message) handleMessage(u.message).catch((err) => console.error("[telegram] handler failed:", err));
       }
     } catch (err) {
+      if (generation !== myGeneration) break;
       console.error("[telegram] getUpdates failed:", err);
       await new Promise((r) => setTimeout(r, 5000));
     }
@@ -165,19 +207,43 @@ async function pollLoop(): Promise<void> {
 }
 
 export function startTelegramBot(): void {
-  if (!TOKEN) return; // dormant unless configured — see .env.example
+  if (!config.token) return; // dormant until configured
   if (ALLOWED.size === 0) {
-    console.warn("[telegram] TELEGRAM_BOT_TOKEN is set but TELEGRAM_ALLOWED_CHAT_IDS is empty — every message will be ignored until you set it.");
+    console.warn("[telegram] a bot token is set but no allowed chat ids are configured — every message will be ignored until you add one (Options tab, or TELEGRAM_ALLOWED_CHAT_IDS in .env).");
   }
-  polling = true;
-  pollLoop();
+  generation++;
+  pollLoop(generation);
   console.log("[telegram] bot polling started");
 }
 
 export function stopTelegramBot(): void {
-  polling = false;
+  generation++; // invalidates any loop still in flight, even if it's mid-await
 }
 
+// Backs the Options tab's Telegram section — POST /api/telegram/config in
+// server.ts. Persists to ~/.caden/telegram.json and takes effect
+// immediately: stop whatever's currently polling (old token, if any) and
+// restart with the new one, no process restart needed. A changed token
+// means a different bot's update stream, so its offset means nothing —
+// reset it; a changed allowlist alone doesn't need that.
+export function setTelegramConfig(update: { token?: string; allowedChatIds?: string[] }): void {
+  const tokenChanged = update.token !== undefined && update.token.trim() !== config.token;
+  if (update.token !== undefined) config.token = update.token.trim();
+  if (update.allowedChatIds !== undefined) config.allowedChatIds = update.allowedChatIds.map((s) => s.trim()).filter(Boolean);
+  persistConfig(config);
+  applyConfig();
+  stopTelegramBot();
+  if (tokenChanged) pollOffset = 0;
+  startTelegramBot();
+}
+
+// Deliberately never exposes the raw token — only a masked preview, so a
+// GET here (or the Options tab's raw-status pre block) can't leak it.
 export function telegramStatus() {
-  return { enabled: !!TOKEN, allowed_chats: ALLOWED.size, active_sessions: sessions.size };
+  return {
+    enabled: !!config.token,
+    token_preview: config.token ? `••••${config.token.slice(-4)}` : null,
+    allowed_chat_ids: config.allowedChatIds,
+    active_sessions: sessions.size,
+  };
 }

@@ -267,6 +267,13 @@
   .opt-row .ctl { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
   .opt-row .ctl .btn, .opt-row .ctl .sel { font-size: 11px; padding: 6px 12px; }
   .opt-row .ctl select.sel { width: auto; }
+  .opt-input {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+    color: var(--amber); background: var(--panel-2);
+    border: 1px solid var(--border); padding: 7px 10px; width: 190px;
+  }
+  .opt-input::placeholder { color: var(--faint); }
+  .opt-input:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
   .opt-note { color: var(--faint); font-size: 11px; margin-top: 6px; letter-spacing: 0.06em; }
   .opt-pre {
     background: var(--panel-2); border: 1px solid var(--border); color: var(--dim);
@@ -418,7 +425,7 @@
               <span class="ctl"><button class="btn" id="optSfxBtn">On</button></span>
             </div>
             <div class="opt-row">
-              <span class="k">Voice (SAM TTS)<small>Reads Caden's replies aloud</small></span>
+              <span class="k">Voice (Gemini TTS)<small>Reads Caden's replies aloud</small></span>
               <span class="ctl"><button class="btn" id="optTtsBtn">On</button></span>
             </div>
             <div class="opt-row">
@@ -492,6 +499,29 @@
           </div>
 
           <div class="opt-section">
+            <div class="opt-title up">Telegram</div>
+            <div class="opt-row">
+              <span class="k">Status<small>Reachable from outside the house once a token and at least one allowed chat id are set — see CLAUDE.md for getting your chat id</small></span>
+            </div>
+            <div id="optTelegramStatus" class="opt-note">—</div>
+            <div class="opt-row">
+              <span class="k">Bot token<small>From @BotFather — never shown back once saved</small></span>
+              <span class="ctl">
+                <input type="password" id="optTelegramToken" class="opt-input" placeholder="123456789:AA..." autocomplete="off" spellcheck="false">
+                <button class="btn" id="optTelegramSaveToken">Save</button>
+                <button class="btn btn-cancel" id="optTelegramClearToken">Clear</button>
+              </span>
+            </div>
+            <div class="opt-row">
+              <span class="k">Allowed chat IDs<small>Comma-separated — anyone else is ignored and logged to System Log</small></span>
+              <span class="ctl">
+                <input type="text" id="optTelegramChatIds" class="opt-input" placeholder="123456789, 987654321" autocomplete="off" spellcheck="false">
+                <button class="btn" id="optTelegramSaveIds">Save</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="opt-section">
             <div class="opt-title up">Raw Status</div>
             <details>
               <summary style="cursor:pointer; color: var(--dim); font-size:11px; letter-spacing:0.1em;">/api/status</summary>
@@ -505,10 +535,6 @@
 
   <div class="footer up">Caden Agent Console // For Indoor Use Only // Full System Access Enabled</div>
 </div>
-
-<!-- SAM (Software Automatic Mouth) — vendored locally, no CDN. See
-     scripts/vendor-sam.sh. Exposes window.SamJs. -->
-<script src="/vendor/samjs.min.js"></script>
 <script>
 (() => {
   'use strict';
@@ -530,6 +556,8 @@
   const optMemorySummary = $('optMemorySummary'), optForget = $('optForget'), optRawStatus = $('optRawStatus');
   const optSfxTiming = $('optSfxTiming');
   const optReminderList = $('optReminderList');
+  const optTelegramStatus = $('optTelegramStatus'), optTelegramToken = $('optTelegramToken'), optTelegramChatIds = $('optTelegramChatIds');
+  const optTelegramSaveToken = $('optTelegramSaveToken'), optTelegramClearToken = $('optTelegramClearToken'), optTelegramSaveIds = $('optTelegramSaveIds');
   const toastStack = $('toastStack');
 
   const STORAGE_KEY = 'caden.session.v2';
@@ -962,15 +990,16 @@
     sfxWs.onerror = () => sfxWs.close();
   }
 
-  // ── Voice (SAM TTS) ───────────────────────────────────────────────────────
-  // Reads Caden's replies aloud with the classic 1982 SAM engine (see
-  // scripts/vendor-sam.sh) — same "self-contained, no CDN" approach as the
-  // status SFX above. Its own AudioContext is managed internally by sam-js,
-  // separate from the one used for SFX.
+  // ── Voice (Gemini TTS) ─────────────────────────────────────────────────
+  // Reads Caden's replies aloud via Gemini's TTS (see synthesizeSpeech in
+  // providers.ts) — the server does the actual synthesis, reusing the same
+  // GEMINI_API_KEYS pool as chat, and hands back a plain .wav; this just
+  // decodes and plays it through the same AudioContext the SFX system
+  // already unlocks (ensureAudioCtx above).
   let ttsEnabled = true;
   try { ttsEnabled = localStorage.getItem('caden.tts') !== 'off'; } catch {}
-  let sam = null;
-  let currentSpeech = null;
+  let speechSource = null;
+  let speechRequestId = 0;
 
   function setTtsBtn() {
     optTtsBtn.textContent = ttsEnabled ? 'On' : 'Off';
@@ -982,25 +1011,40 @@
     ttsEnabled = !ttsEnabled;
     try { localStorage.setItem('caden.tts', ttsEnabled ? 'on' : 'off'); } catch {}
     setTtsBtn();
-    if (!ttsEnabled && currentSpeech) { try { currentSpeech.abort('muted'); } catch {} currentSpeech = null; }
+    if (!ttsEnabled) stopSpeech();
   });
 
-  // SAM's reciter treats "Caden" as an ordinary word and mispronounces it
-  // ("CAD-en") — respelling it phonetically as "Kayden" before it ever
-  // reaches the TTS engine gets the correct "KAY-den" without touching what's
-  // actually displayed in the chat.
-  function ttsText(text) {
-    return String(text || '').replace(/\bcaden\b/gi, 'Kayden');
+  function stopSpeech() {
+    if (speechSource) { try { speechSource.stop(); } catch {} speechSource = null; }
   }
 
-  function speakCaden(text) {
-    if (!ttsEnabled || !text || !window.SamJs) return;
-    if (currentSpeech) { try { currentSpeech.abort('superseded'); } catch {} currentSpeech = null; }
-    if (!sam) sam = new window.SamJs({ speed: 72, pitch: 64, mouth: 128, throat: 128 });
+  async function speakCaden(text) {
+    if (!ttsEnabled || !text) return;
+    stopSpeech();
+    ensureAudioCtx();
+    // Synthesis + decode is async — a fast follow-up message (or muting TTS
+    // mid-flight) can outrace this. Tag each call so a stale response never
+    // starts talking over a newer one.
+    const myRequest = ++speechRequestId;
     try {
-      currentSpeech = sam.speak(ttsText(text));
-      currentSpeech.catch(() => {}).finally(() => { currentSpeech = null; });
-    } catch {}
+      const resp = await fetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!resp.ok || myRequest !== speechRequestId || !ttsEnabled) return;
+      const buf = await resp.arrayBuffer();
+      if (myRequest !== speechRequestId || !ttsEnabled) return;
+      const decoded = await audioCtx.decodeAudioData(buf);
+      if (myRequest !== speechRequestId || !ttsEnabled) return;
+      const src = audioCtx.createBufferSource();
+      src.buffer = decoded;
+      src.connect(audioCtx.destination);
+      speechSource = src;
+      src.start();
+    } catch {
+      // Network hiccup or no Gemini keys configured — skip speech silently;
+      // the text reply already rendered regardless.
+    }
   }
 
   // ── Reminders ─────────────────────────────────────────────────────────────
@@ -1068,6 +1112,46 @@
     refreshOptions();
   });
 
+  optTelegramSaveToken.addEventListener('click', async () => {
+    const token = optTelegramToken.value.trim();
+    if (!token) return;
+    optTelegramSaveToken.disabled = true;
+    try {
+      await fetch('/api/telegram/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      optTelegramToken.value = ''; // never redisplayed once saved
+    } catch {}
+    optTelegramSaveToken.disabled = false;
+    refreshOptions();
+  });
+
+  optTelegramClearToken.addEventListener('click', async () => {
+    optTelegramClearToken.disabled = true;
+    try {
+      await fetch('/api/telegram/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: '' }),
+      });
+    } catch {}
+    optTelegramClearToken.disabled = false;
+    refreshOptions();
+  });
+
+  optTelegramSaveIds.addEventListener('click', async () => {
+    const ids = optTelegramChatIds.value.split(',').map((s) => s.trim()).filter(Boolean);
+    optTelegramSaveIds.disabled = true;
+    try {
+      await fetch('/api/telegram/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowed_chat_ids: ids }),
+      });
+    } catch {}
+    optTelegramSaveIds.disabled = false;
+    refreshOptions();
+  });
+
   async function refreshOptions() {
     try {
       const status = await (await fetch('/api/status')).json();
@@ -1080,6 +1164,13 @@
       optUpdateMeta.textContent = status.update?.last_checked ? 'Last checked ' + new Date(status.update.last_checked).toLocaleTimeString('en-GB', { hour12: false }) : 'Not checked yet this session';
       if (status.sfx) {
         optSfxTiming.textContent = 'Lookahead ' + status.sfx.lookahead_ms + 'ms · local compensation ' + status.sfx.local_latency_ms + 'ms (' + status.sfx.local_latency_source + ')';
+      }
+      if (status.telegram) {
+        const t = status.telegram;
+        optTelegramStatus.textContent = t.enabled
+          ? 'Configured (token ' + (t.token_preview || '?') + ') · ' + t.allowed_chat_ids.length + ' allowed chat' + (t.allowed_chat_ids.length === 1 ? '' : 's') + ' · ' + t.active_sessions + ' active session' + (t.active_sessions === 1 ? '' : 's')
+          : 'Not configured — add a bot token below';
+        if (document.activeElement !== optTelegramChatIds) optTelegramChatIds.value = (t.allowed_chat_ids || []).join(', ');
       }
     } catch {}
     try {
