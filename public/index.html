@@ -709,6 +709,58 @@
 
   function showDots(el) { el.innerHTML = ''; const d = document.createElement('span'); d.className = 'dots'; d.innerHTML = '<i></i><i></i><i></i>'; el.appendChild(d); }
 
+  // Caden self-updates by exiting so systemd relaunches the freshly built
+  // process (see update.ts) — a real, if brief (~1-2s), gap where nothing is
+  // listening. A chat request that races that gap (in flight when the process
+  // exits, or sent during the relaunch) has its connection dropped, which
+  // fetch() surfaces as a bare TypeError "Failed to fetch". The server side
+  // already waits for in-flight requests before restarting (activity.ts), but
+  // it can't cover the relaunch downtime itself, so the client has to be
+  // resilient to it: on a network-level failure (not an HTTP error, not a
+  // user cancel), wait for the server to come back and retry the request
+  // rather than dead-ending on "Failed to fetch". This is the client-side
+  // mirror of runAgentTurnRetrying's "ride out a transient outage" stance.
+  const RECONNECT_BUDGET_MS = 90_000;
+
+  async function waitForServerBack(signal, deadline) {
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (signal.aborted) return false;
+      try {
+        // /api/status is instant and unauthenticated — the moment it answers,
+        // the relaunched server is up and ready for a fresh /api/chat.
+        const r = await fetch('/api/status', { signal, cache: 'no-store' });
+        if (r.ok) return true;
+      } catch { /* still down — keep polling until the deadline */ }
+    }
+    return false;
+  }
+
+  async function fetchChatWithReconnect(body, signal, setReconnecting) {
+    let deadline = null;
+    while (true) {
+      try {
+        const resp = await fetch('/api/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body), signal,
+        });
+        setReconnecting(false);
+        return resp; // HTTP-level errors (incl. 502) are the caller's to handle
+      } catch (err) {
+        // A user cancel aborts the same signal — that's not a dropped
+        // connection to ride out, it's an intentional stop; let it propagate.
+        if (signal.aborted || (err && err.name === 'AbortError')) throw err;
+        if (deadline === null) deadline = Date.now() + RECONNECT_BUDGET_MS;
+        if (Date.now() >= deadline) { setReconnecting(false); throw err; }
+        setReconnecting(true);
+        const back = await waitForServerBack(signal, deadline);
+        if (!back) { setReconnecting(false); throw err; }
+        // Server's back — loop and re-send the same turn. The dropped attempt
+        // never returned a reply, so re-running it is the natural recovery.
+      }
+    }
+  }
+
   async function ask(text, images) {
     if (inFlight) return;
     const prompt = text.trim();
@@ -719,7 +771,12 @@
     cancelBtn.style.display = '';
     const t0 = performance.now();
     setSys('WORKING // PROCESSING REQUEST');
+    // Flipped true by fetchChatWithReconnect while it's riding out a server
+    // restart, so the status line reflects that rather than the timer
+    // clobbering it back to "WORKING" every second.
+    let reconnecting = false;
     const sysTimer = setInterval(() => {
+      if (reconnecting) { setSys('RECONNECTING // SERVER RESTARTING'); return; }
       setSys('WORKING // PROCESSING REQUEST (' + Math.floor((performance.now() - t0) / 1000) + 's)');
     }, 1000);
     const content = images.length
@@ -735,11 +792,11 @@
     showDots(live.body);
 
     try {
-      const resp = await fetch('/api/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent, messages: history }),
-        signal: currentController.signal,
-      });
+      const resp = await fetchChatWithReconnect(
+        { agent, messages: history },
+        currentController.signal,
+        (s) => { reconnecting = s; },
+      );
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Request failed.');
 
@@ -767,9 +824,13 @@
       await typewriter(live.body, reply);
     } catch (err) {
       trace.el.remove();
-      if (err && err.name === 'AbortError') {
-        // User-initiated cancel, not a failure — drop the pending placeholder
-        // rather than logging it as an error turn.
+      // A cancel can surface either as an AbortError (the fetch was mid-flight
+      // when aborted) or, if it happened while fetchChatWithReconnect was
+      // between attempts waiting for the server, as the last network error
+      // with the controller already aborted — treat both as a user cancel,
+      // not a failure, and drop the pending placeholder rather than logging
+      // an error turn.
+      if ((err && err.name === 'AbortError') || (currentController && currentController.signal.aborted)) {
         live.turn.remove();
       } else {
         const message = String(err.message || err);

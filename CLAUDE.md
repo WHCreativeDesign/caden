@@ -708,6 +708,37 @@ synthesis, not just the chat turn that triggered it. (Telegram's
 `sendVoiceReply` never had this gap — it's already awaited inside the same
 `markBusy`/`markIdle` window as the chat turn, in `telegram.ts`.)
 
+**The `markBusy` guard can't cover the restart *downtime* itself — the web
+UI rides it out instead.** `markBusy`/`isBusy` only defers the restart
+until in-flight requests finish; it does nothing for the ~1-2s gap where
+the old process has exited and systemd hasn't finished relaunching yet. A
+chat request that lands in that gap — sent during the relaunch, or arriving
+microseconds after the watcher's single point-in-time `isBusy()` check — has
+its connection dropped, which `fetch()` surfaces as a bare `TypeError:
+Failed to fetch`. This is not hypothetical: it's what "CADEN // OFFLINE —
+Failed to fetch" with a near-zero `UPTIME` in the TELEMETRY panel actually
+was — a chat message racing a self-update restart (frequently the very
+deploy that shipped the previous fix, since every push triggers a restart
+within one poll interval). Since some downtime is inherent to an
+exit-and-relaunch update model, the fix is client-side resilience rather
+than trying to make the restart gap zero: `fetchChatWithReconnect` in
+`public/index.html` catches a network-level failure (a `fetch()` rejection,
+as opposed to an HTTP error response, which renders normally, or a user
+cancel via the same `AbortController`), then polls `/api/status` until the
+relaunched server answers and re-sends the same turn — up to a
+`RECONNECT_BUDGET_MS` (90s) budget. The status line shows `RECONNECTING //
+SERVER RESTARTING` meanwhile (a `reconnecting` flag the per-second status
+timer honors so it doesn't clobber it back to `WORKING`), so a self-update
+restart becomes an invisible ~2s blip instead of a dead-end error. This is
+the client-side mirror of `runAgentTurnRetrying`'s "ride out a transient
+outage rather than fail the person's message" stance (`agent.ts`). Note the
+dropped attempt never returned a reply, so re-sending it is the natural
+recovery, not a double-submit of a completed action. If a chat failure ever
+does *not* correlate with a restart (`UPTIME` is not near-zero and no deploy
+just happened), suspect a different cause — e.g. the agent opening a browser
+under memory pressure on the 4GB Pi — and check `journalctl -u caden` for an
+OOM-kill or crash rather than assuming this path.
+
 ## Deploying changes
 
 There's no separate "deploy" step to a hosted platform anymore — pushing to
