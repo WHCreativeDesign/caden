@@ -22,7 +22,10 @@ export interface AuditEntry {
   ts: string;
   command: string;
   cwd: string;
-  status: "running" | "ok" | "error";
+  // "running"/"ok"/"error" come from shell execution; "log"/"warn"/"error"
+  // also carry forwarded console output (see logbus.ts) so the System Log
+  // panel shows the whole daemon's activity, not just shell commands.
+  status: "running" | "ok" | "error" | "log" | "warn";
   exit_code?: number;
   output?: string;
 }

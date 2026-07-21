@@ -258,8 +258,17 @@
   .log-line.ok .tag { color: var(--green); border-color: var(--green); }
   .log-line.error .tag { color: var(--red); border-color: var(--red); }
   .log-line.running .tag { color: var(--amber); border-color: var(--amber); }
+  .log-line.warn .tag { color: var(--amber); border-color: var(--amber); }
+  .log-line.log .tag { color: var(--dim); }
   .log-line .cmd { color: var(--cream); }
   .log-empty { color: var(--faint); font-size: 12px; letter-spacing: 0.12em; text-align: center; padding: 40px 10px; }
+  .log-copy-btn {
+    font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    background: transparent; color: #000; border: 1px solid rgba(0,0,0,0.5);
+    padding: 2px 12px; cursor: pointer;
+  }
+  .log-copy-btn:hover { background: rgba(0,0,0,0.12); }
+  .log-copy-btn:active { background: rgba(0,0,0,0.22); }
 
   /* Options / debug panel */
   .options-scroll { flex: 1; overflow-y: auto; padding: 16px; min-height: 0; }
@@ -391,9 +400,12 @@
 
       <!-- SYSTEM -->
       <div class="panel view hidden" id="viewSystem">
-        <div class="panel-head">SYSTEM LOG <span class="meta up">Shell Activity</span></div>
+        <div class="panel-head">
+          <span>SYSTEM LOG <span class="meta up">All Activity</span></span>
+          <button class="log-copy-btn up" id="logCopyBtn" type="button">Copy</button>
+        </div>
         <div class="log-scroll" id="logBody">
-          <div class="log-empty up" id="logEmpty">No shell activity yet</div>
+          <div class="log-empty up" id="logEmpty">No activity yet</div>
         </div>
       </div>
 
@@ -572,7 +584,7 @@
   const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachRow = $('attachRow');
   const tabChat = $('tabChat'), tabSystem = $('tabSystem'), tabOptions = $('tabOptions');
   const viewChat = $('viewChat'), viewSystem = $('viewSystem'), viewOptions = $('viewOptions');
-  const logBody = $('logBody'), logEmpty = $('logEmpty');
+  const logBody = $('logBody'), logEmpty = $('logEmpty'), logCopyBtn = $('logCopyBtn');
   const linkDot = $('linkDot'), linkText = $('linkText'), sysText = $('sysText');
   const keySeg = $('keySeg');
   const tMainframe = $('tMainframe'), tSha = $('tSha'), tUptime = $('tUptime'), tGroq = $('tGroq'), tGemini = $('tGemini'), tBrowser = $('tBrowser'), tClock = $('tClock');
@@ -946,23 +958,87 @@
     return (base.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + base.host + path;
   }
 
+  // Full, untruncated text of every log entry received (backlog + live), kept
+  // in parallel with the DOM so the Copy button can hand over everything, not
+  // just the truncated snippets shown on screen. Both are capped so a
+  // long-lived session can't grow without bound.
+  const LOG_MAX_LINES = 3000;
+  let logEntries = [];
+
+  function logEntryToText(entry) {
+    const parts = [];
+    if (entry.ts) parts.push(entry.ts);
+    const st = (entry.status || '').toUpperCase(); if (st) parts.push('[' + st + ']');
+    if (entry.cwd) parts.push('(' + entry.cwd + ')');
+    if (entry.command) parts.push(entry.command);
+    let text = parts.join(' ');
+    if (entry.output) text += '\n' + entry.output;
+    return text;
+  }
+
+  function appendLogEntry(entry) {
+    if (logEmpty && logEmpty.parentNode) logEmpty.remove();
+    logEntries.push(logEntryToText(entry));
+    if (logEntries.length > LOG_MAX_LINES) logEntries.splice(0, logEntries.length - LOG_MAX_LINES);
+
+    const line = document.createElement('div');
+    line.className = 'log-line ' + (entry.status || '');
+    const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = (entry.status || '').toUpperCase();
+    const cmd = document.createElement('span'); cmd.className = 'cmd'; cmd.textContent = entry.command || '';
+    line.append(tag, cmd);
+    // Display truncates long shell output to keep the panel readable; the Copy
+    // button still carries the full text (stored above).
+    if (entry.output) line.appendChild(document.createTextNode('\n' + entry.output.slice(0, 800)));
+    // Near-bottom check before appending, so we only autoscroll when the user
+    // is already following the tail rather than yanking them down mid-scroll.
+    const atBottom = logBody.scrollHeight - logBody.scrollTop - logBody.clientHeight < 40;
+    logBody.appendChild(line);
+    while (logBody.children.length > LOG_MAX_LINES) logBody.removeChild(logBody.firstChild);
+    if (atBottom) logBody.scrollTop = logBody.scrollHeight;
+  }
+
   function connectLogWs() {
     const ws = new WebSocket(wsUrl('/ws/log'));
+    // Each (re)connection replays the full backlog since boot, so clear what
+    // we have to avoid duplicating it on top of the previous connection's copy.
+    ws.onopen = () => { logEntries = []; [...logBody.querySelectorAll('.log-line')].forEach((el) => el.remove()); };
     ws.onmessage = (ev) => {
       let entry; try { entry = JSON.parse(ev.data); } catch { return; }
-      if (logEmpty && logEmpty.parentNode) logEmpty.remove();
-      const line = document.createElement('div');
-      line.className = 'log-line ' + (entry.status || '');
-      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = (entry.status || '').toUpperCase();
-      const cmd = document.createElement('span'); cmd.className = 'cmd'; cmd.textContent = entry.command || '';
-      line.append(tag, cmd);
-      if (entry.output) line.appendChild(document.createTextNode('\n' + entry.output.slice(0, 400)));
-      logBody.appendChild(line);
-      logBody.scrollTop = logBody.scrollHeight;
+      appendLogEntry(entry);
     };
     ws.onclose = () => setTimeout(connectLogWs, 3000);
     ws.onerror = () => ws.close();
   }
+
+  // Clipboard, with a fallback: the Pi's web UI is usually served over plain
+  // http on the LAN, where navigator.clipboard is unavailable (it needs a
+  // secure context), so fall back to a hidden textarea + execCommand('copy').
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch { /* fall through to the legacy path */ }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch { return false; }
+  }
+
+  logCopyBtn.addEventListener('click', async () => {
+    const text = logEntries.join('\n');
+    const ok = await copyText(text);
+    const original = logCopyBtn.textContent;
+    logCopyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+    setTimeout(() => { logCopyBtn.textContent = original; }, 1400);
+  });
 
   // ── Status SFX ──────────────────────────────────────────────────────────
   // The Pi plays these same sounds locally (src/sfx.ts) at the same target

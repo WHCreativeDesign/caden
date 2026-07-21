@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { AgentName, agentLabel, compactHistoryIfNeeded, runAgentTurnRetrying } from "./agent.js";
 import { providerStatus, synthesizeSpeech } from "./providers.js";
 import { auditEvents } from "./tools/shell.js";
+import { logHistory } from "./logbus.js";
 import { browserStatus, setModeOverride, closeBrowser } from "./tools/browser.js";
 import { updateStatus, setUpdateInterval, checkNow } from "./update.js";
 import { MAINFRAME_VERSION } from "./version.js";
@@ -191,6 +192,11 @@ export function startServer() {
 
   logWss.on("connection", (ws: WebSocket) => {
     const onEntry = (entry: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(entry)); };
+    // Replay everything logged since boot first, so the panel shows the full
+    // picture the moment it opens rather than only what happens afterward.
+    // JS is single-threaded and there's no await here, so no live entry can
+    // slip in between the snapshot and attaching the listener.
+    for (const entry of logHistory()) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(entry)); }
     auditEvents.on("entry", onEntry);
     ws.on("close", () => auditEvents.off("entry", onEntry));
   });
