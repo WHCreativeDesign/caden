@@ -96,12 +96,24 @@ export function startServer() {
   app.post("/api/tts", async (req, res) => {
     const text = String(req.body?.text ?? "").trim();
     if (!text) return res.status(400).json({ error: "`text` must be a non-empty string" });
+    // markBusy/markIdle here too, not just /api/chat: speakCaden() in the
+    // web UI fires this the instant a chat reply lands, right after that
+    // /api/chat request already marked itself idle — so without this, the
+    // self-update watcher's "wait for in-flight requests before restarting"
+    // check (activity.ts / update.ts) is blind to a synthesis request still
+    // in flight. It would see idle, restart immediately, kill this
+    // connection, and — worse — leave a real gap where the server is briefly
+    // down for systemd to relaunch it, during which the person's very next
+    // message gets a raw "Failed to fetch" with no explanation.
+    markBusy();
     try {
       const wav = await synthesizeSpeech(text);
       res.setHeader("Content-Type", "audio/wav");
       res.send(wav);
     } catch (err) {
       res.status(502).json({ error: String((err as Error).message ?? err) });
+    } finally {
+      markIdle();
     }
   });
 

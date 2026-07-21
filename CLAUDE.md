@@ -16,8 +16,8 @@ lives in this repo and runs on the Pi itself.
 
 Canvas mode is cut for now — a deliberate scope narrowing to focus on the
 chat experience, a good transparent single conversational surface, before
-it comes back, if it does. Voice (SAM TTS reading replies aloud) came back
-— see "Voice (SAM text-to-speech)" below.
+it comes back, if it does. Voice (Gemini TTS reading replies aloud) came
+back — see "Voice (Gemini text-to-speech)" below.
 
 ---
 
@@ -399,6 +399,14 @@ before this existed (tried a hallucinated `mainframe -v` command). Also
 surfaced in `/api/status` as `mainframe_version` and shown in the web UI's
 TELEMETRY panel as `MAINFRAME`. Bump `package.json`'s version to update it.
 
+**Versioning policy: bump on every fix, not just features.** Any commit
+that fixes a bug bumps `package.json`'s version (minor, e.g. 1.1.0 →
+1.2.0) as part of that same commit — this is what makes `MAINFRAME` in the
+TELEMETRY panel a meaningful "what's actually running on the Pi right
+now" signal after a self-update pulls it in, rather than a number that
+only moves for new features. Don't batch several fixes under one bump;
+each fix commit gets its own.
+
 ## Status SFX (Pi ↔ browser synced sound)
 
 `src/sfx.ts` + `/ws/sfx` in `server.ts` give Caden six status sounds,
@@ -682,6 +690,23 @@ handler increment/decrement around the agent-turn call; `checkOnce()` in
 every second, capped at `RESTART_WAIT_CAP_MS`, 4 minutes — a bit longer
 than the chat retry budget) before exiting, rather than restarting straight
 through an active request.
+
+**This coverage had a gap: `/api/tts` wasn't tracked.** `speakCaden()` in
+the web UI fires `POST /api/tts` *after* `/api/chat` has already returned
+— by the time speech synthesis is in flight, the `/api/chat` handler has
+already called `markIdle()`. Since only `/api/chat` and Telegram's message
+handler touched `markBusy`/`markIdle`, `isBusy()` had no idea a synthesis
+request was still running, so a self-update landing in that window would
+restart immediately: killing the in-flight `/api/tts` connection, and
+worse, leaving the server briefly and genuinely down while systemd
+relaunches it — during which the person's *next* chat message (sent
+moments after the reply they just heard) would get exactly the same bare
+`Failed to fetch`, with a freshly-reset uptime making it look like nothing
+was ever wrong. `/api/tts` now calls `markBusy`/`markIdle` too (`server.ts`),
+so self-update's "wait for idle" check actually accounts for speech
+synthesis, not just the chat turn that triggered it. (Telegram's
+`sendVoiceReply` never had this gap — it's already awaited inside the same
+`markBusy`/`markIdle` window as the chat turn, in `telegram.ts`.)
 
 ## Deploying changes
 
