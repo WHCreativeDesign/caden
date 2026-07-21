@@ -53,6 +53,7 @@ src/
   providers.ts              — Groq/Gemini key cycling (in-memory, single-user — no DB)
   server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/sfx
   activity.ts                 — tracks in-flight chat turns so self-update waits for idle before restarting
+  logbus.ts                    — forwards all console output into the System Log panel + buffers it since boot
   update.ts                   — self-update watcher (git fetch/pull → rebuild → exit; systemd relaunches)
   sfx.ts                        — status SFX: broadcasts + local aplay/paplay playback, synced with the browser
   telegram.ts                   — Telegram bot channel: text + voice notes, reuses the same agent loop
@@ -200,6 +201,49 @@ toggle:
 
 If you add another runtime-adjustable setting anywhere in the app, this is
 where it belongs — don't invent a second settings surface.
+
+## System Log panel (all activity, not just shell)
+
+The web UI's second tab is a live view of the whole daemon's activity, fed
+by `/ws/log` (`server.ts`) off the `auditEvents` channel. It started as
+just the shell audit trail (`run_shell` logs every command there before it
+runs — see Governance), and a few other things already emitted onto the
+same channel directly (`sfx.ts` playback failures, `telegram.ts`
+unauthorized-message notices). `src/logbus.ts` widened it to *everything*:
+
+- **Console capture.** `installConsoleCapture()` (called first thing in
+  `index.ts`, before anything logs) wraps `console.log/info/debug/warn/error`
+  so each call still prints to the journal via the original method *and* is
+  emitted as a log entry (`status` `log`/`warn`/`error`). So all the
+  `[server]`/`[update]`/`[sfx]`/`[telegram]`/`[weather]` logging that used to
+  only reach `journalctl -u caden` now also streams into the panel live. A
+  re-entrancy guard (`inEmit`) rules out a listener that logs while handling
+  an entry recursing forever. Only the daemon installs this — the
+  `caden-chat` CLI is a separate process and never imports `logbus.ts`, so
+  its normal terminal output is untouched.
+- **Backlog since boot.** `logbus.ts` keeps a bounded ring buffer
+  (`MAX_LOG_HISTORY`, 1000 entries) of every entry, so a browser that opens
+  the panel *after* things have happened still gets the full picture, not
+  just what happens after it connects. `/ws/log`'s connection handler
+  replays `logHistory()` before attaching the live listener (no `await`
+  between the snapshot and the attach, so single-threaded JS can't drop or
+  duplicate an entry in the gap). The daemon self-updates by restarting, so
+  "since boot" is the practical scope of "everything"; the frontend clears
+  its view on each `ws.onopen` so a reconnect's fresh replay doesn't stack
+  on the previous connection's copy.
+- **Copy button.** The panel header has a Copy button that writes the full,
+  *untruncated* log to the clipboard. The frontend keeps a parallel
+  `logEntries` array of complete entry text (the on-screen lines truncate
+  long shell output for readability; the copy doesn't). Clipboard access
+  falls back to a hidden-textarea + `execCommand('copy')` because the Pi's
+  UI is usually served over plain http on the LAN, where
+  `navigator.clipboard` is unavailable (it needs a secure context).
+
+If you add a new background/proactive behavior, it doesn't need special
+wiring to show up here — just `console.log`/`console.error` normally and
+`logbus.ts` forwards it. Reserve a *direct* `auditEvents.emit` for entries
+that want the richer shape (a distinct `command`/`cwd`/`output`, e.g. shell
+commands) rather than a flat message line.
 
 ## Accuracy discipline
 
