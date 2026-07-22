@@ -108,10 +108,12 @@ export function startServer() {
     // message gets a raw "Failed to fetch" with no explanation.
     markBusy();
     try {
+      console.log(`[tts] synthesizing ${text.length} char${text.length === 1 ? "" : "s"} of speech`);
       const wav = await synthesizeSpeech(text);
       res.setHeader("Content-Type", "audio/wav");
       res.send(wav);
     } catch (err) {
+      console.error(`[tts] synthesis failed: ${String((err as Error).message ?? err).slice(0, 200)}`);
       res.status(502).json({ error: String((err as Error).message ?? err) });
     } finally {
       markIdle();
@@ -153,6 +155,7 @@ export function startServer() {
     const { agent, messages } = req.body ?? {};
     if (!Array.isArray(messages)) return res.status(400).json({ error: "`messages` must be an array." });
     const agentName: AgentName = ["caden", "researcher", "scout"].includes(agent) ? agent : "caden";
+    console.log(`[chat] message received (agent=${agentName}, ${messages.length} message${messages.length === 1 ? "" : "s"} in history)`);
     triggerSfx("sent");
 
     // The client's Cancel button aborts its fetch, which closes this
@@ -173,12 +176,14 @@ export function startServer() {
       // here on, instead of paying the full growing cost every turn.
       const { history, compacted } = await compactHistoryIfNeeded(messages);
       const result = await runAgentTurnRetrying(history, agentName, () => cancelled);
-      if (cancelled) return;
+      if (cancelled) { console.log("[chat] request cancelled by client"); return; }
       triggerSfx("success");
+      console.log(`[chat] reply sent (${result.rounds} round${result.rounds === 1 ? "" : "s"}, ${result.steps.length} tool call${result.steps.length === 1 ? "" : "s"}${compacted ? ", history compacted" : ""})`);
       res.json({ agent: agentName, agent_label: agentLabel(agentName), ...(compacted ? { history } : {}), ...result });
     } catch (err) {
-      if (cancelled) return;
+      if (cancelled) { console.log("[chat] request cancelled by client"); return; }
       triggerSfx("error");
+      console.error(`[chat] turn failed: ${String((err as Error).message ?? err).slice(0, 200)}`);
       res.status(502).json({ error: String((err as Error).message ?? err) });
     } finally {
       markIdle();

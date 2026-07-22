@@ -203,6 +203,13 @@ export async function runAgentTurn(
   const reminders = reminderContext();
   if (reminders) workingMessages.splice(insertAt++, 0, { role: "system", content: reminders });
 
+  // Everything below console.log's its progress so the whole turn is visible
+  // in the System Log panel live (logbus.ts forwards console output there),
+  // not just startup lines — sending a message used to leave the panel silent
+  // because this path never logged anything.
+  const lastUser = [...history].reverse().find((m) => m.role === "user");
+  console.log(`[agent] ${agentName} turn: ${clip(approxContentText(lastUser?.content) || "(no text)", 200)}`);
+
   const steps: AgentStep[] = [];
   let announcedThinking = false;
 
@@ -212,8 +219,12 @@ export async function runAgentTurn(
     const msg = choice.message;
 
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      return { reply: msg.content ?? "", steps, rounds: round + 1 };
+      const reply = msg.content ?? "";
+      console.log(`[agent] ${agentName} reply (${round + 1} round${round === 0 ? "" : "s"}, ${steps.length} tool call${steps.length === 1 ? "" : "s"}): ${clip(reply, 300)}`);
+      return { reply, steps, rounds: round + 1 };
     }
+
+    console.log(`[agent] round ${round + 1}: ${msg.tool_calls.length} tool call${msg.tool_calls.length === 1 ? "" : "s"} — ${(msg.tool_calls as any[]).map((t) => t.function?.name ?? "unknown").join(", ")}`);
 
     // Once per turn, the moment real tool work starts — an audible "on it"
     // distinct from "sent", since a turn that needs several rounds of tool
@@ -248,6 +259,8 @@ export async function runAgentTurn(
       }
 
       const resultStr = JSON.stringify(resultForModel);
+      const isErr = !!(result && typeof result === "object" && "error" in (result as any));
+      (isErr ? console.warn : console.log)(`[tool] ${name}(${clip(rawArgs, 200)}) -> ${clip(resultStr, 300)}`);
       steps.push({ tool: name, arguments: clip(rawArgs, 600), result: clip(resultStr, 1200) });
       workingMessages.push({ role: "tool", tool_call_id: tc.id, content: resultStr });
     }
@@ -263,6 +276,7 @@ export async function runAgentTurn(
     }
   }
 
+  console.warn(`[agent] ${agentName} hit the ${agent.rounds}-round cap without a final reply`);
   throw new Error(`Agent exceeded max rounds (${agent.rounds}).`);
 }
 
@@ -313,6 +327,7 @@ export async function compactHistoryIfNeeded(history: Array<Record<string, unkno
   }
   const older = nonSystem.slice(0, -SUMMARY_KEEP_RECENT);
   const recent = nonSystem.slice(-SUMMARY_KEEP_RECENT);
+  console.log(`[agent] compacting history: folding ${older.length} older message${older.length === 1 ? "" : "s"} into a summary, keeping ${recent.length} recent`);
   try {
     const transcriptParts: string[] = [];
     if (priorSummary) transcriptParts.push("Earlier summary: " + (priorSummary.content as string).slice(SUMMARY_MARKER.length));

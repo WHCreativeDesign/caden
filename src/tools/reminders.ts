@@ -105,6 +105,7 @@ function checkDue(): void {
     if (!r.fired && new Date(r.due_at).getTime() <= now) {
       r.fired = true;
       changed = true;
+      console.log(`[reminder] due: ${r.message}`);
       reminderEvents.emit("due", r);
       triggerSfx("reminder");
     }
