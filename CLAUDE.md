@@ -111,11 +111,19 @@ sees "working" the whole time, not a string of errors. A non-provider
 failure (the agent looping past its round cap) is a real limit, not a blip,
 so it's surfaced immediately instead of retried. It takes an `isCancelled()`
 callback so both callers can hook up their own cancel signal: `server.ts`'s
-`POST /api/chat` watches `req`'s own `close` event — the web UI's Cancel
-button (next to Send, appears once a request is in flight) aborts its
-`fetch` via an `AbortController`, which closes the connection and stops the
-loop on its next check rather than burning through the rest of its budget
-pointlessly. `telegram.ts` (below) uses the same helper with no cancel
+`POST /api/chat` watches the **response**'s `close` event (`res.on("close")`
+with a `!res.writableEnded` guard) — the web UI's Cancel button (next to
+Send, appears once a request is in flight) aborts its `fetch` via an
+`AbortController`, which closes the connection and stops the loop on its
+next check rather than burning through the rest of its budget pointlessly.
+This deliberately does **not** watch `req`'s `close`: `req` (the request
+stream) fires `close` the moment the request body is fully read — instantly
+for a normal POST, nothing to do with the client leaving — so watching it
+flagged *every* chat turn as cancelled on arrival and the reply was never
+sent (a real bug that made chat show "message received" then "request
+cancelled by client" with no LLM call in between). Only a `res` close
+*before the response finished writing* means the client actually went away
+mid-turn. `telegram.ts` (below) uses the same helper with no cancel
 signal — there's no "abort" gesture over Telegram, a reply either arrives
 or the budget runs out.
 

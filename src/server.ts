@@ -161,8 +161,17 @@ export function startServer() {
     // The client's Cancel button aborts its fetch, which closes this
     // connection — that's the cancel signal: stop retrying the instant it
     // happens rather than finishing out the backoff budget pointlessly.
+    //
+    // This MUST watch `res`, not `req`: `req` (the request stream) emits
+    // 'close' as soon as the request body has been fully read — which is
+    // immediately for a normal POST, and has nothing to do with the client
+    // going away. Using it flagged EVERY chat turn as "cancelled" the moment
+    // it arrived (the turn was skipped and the reply never sent — a hard bug,
+    // not a rare race). `res` 'close' firing *before the response has
+    // finished writing* (`!res.writableEnded`) is the real "client
+    // disconnected mid-turn" signal.
     let cancelled = false;
-    req.on("close", () => { cancelled = true; });
+    res.on("close", () => { if (!res.writableEnded) cancelled = true; });
 
     // Tells the self-update watcher not to restart out from under this
     // request — a turn can legitimately run for minutes now (the retry
