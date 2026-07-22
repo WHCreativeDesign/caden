@@ -138,6 +138,7 @@ async function callProvider(provider: "groq" | "gemini", model: string, messages
     if (resp.status === 429) {
       const retryAfter = Number(resp.headers.get("retry-after")) || 60;
       cycler.markLimited(key, retryAfter);
+      console.warn(`[llm] ${provider} key rate-limited (429) — backing off ${retryAfter}s, ${cycler.status().available}/${cycler.status().total} keys still available`);
       lastErr = new Error(`${provider} rate-limited`);
       continue;
     }
@@ -285,11 +286,17 @@ export async function llm(messages: unknown[], profile: string, tools?: ToolSche
   const models = MODELS[profile] ?? MODELS[DEFAULT_PROFILE];
   const groqModel = hasImageContent(messages) ? models.groqVision : models.groq;
   try {
-    return await callProvider("groq", groqModel, messages, tools);
+    const r = await callProvider("groq", groqModel, messages, tools);
+    console.log(`[llm] groq ${groqModel}`);
+    return r;
   } catch (groqErr) {
+    console.warn(`[llm] groq (${groqModel}) failed: ${String((groqErr as Error).message ?? groqErr).slice(0, 160)} — falling back to gemini`);
     try {
-      return await callProvider("gemini", models.gemini, messages, tools);
+      const r = await callProvider("gemini", models.gemini, messages, tools);
+      console.log(`[llm] gemini ${models.gemini} (fallback)`);
+      return r;
     } catch (geminiErr) {
+      console.error(`[llm] all providers failed — groq: ${String((groqErr as Error).message ?? groqErr).slice(0, 120)} | gemini: ${String((geminiErr as Error).message ?? geminiErr).slice(0, 120)}`);
       throw new Error(JSON.stringify({ error: "All LLM providers failed.", groq: String(groqErr), gemini: String(geminiErr) }));
     }
   }

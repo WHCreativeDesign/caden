@@ -245,6 +245,22 @@ wiring to show up here — just `console.log`/`console.error` normally and
 that want the richer shape (a distinct `command`/`cwd`/`output`, e.g. shell
 commands) rather than a flat message line.
 
+**The chat/agent path logs its whole lifecycle** so a turn is actually
+visible here, not silent. Forwarding console output only helps if the code
+*emits* any — and originally the request path didn't, so sending a message
+left the panel showing nothing but the two boot lines. Now each stage logs:
+`server.ts`'s `/api/chat` logs receipt and the reply-sent summary (rounds +
+tool-call count, and whether history was compacted) or a failure;
+`agent.ts`'s `runAgentTurn` logs the turn's opening user text, each round's
+tool calls, every `[tool]` call with its clipped args and result (warn if
+the result carried an `error`), the final `[agent] reply`, and the
+round-cap case; `providers.ts`'s `llm()` logs which `[llm]` provider/model
+answered, a Groq→Gemini fallback, per-key 429 backoffs, and the
+all-providers-failed case; `/api/tts` logs synthesis; and a due
+`[reminder]` logs when it fires. Keep new work on this path logging in the
+same shape — a bare `[stage] what happened` line — so the panel stays a
+real-time trace of a turn rather than going quiet mid-request.
+
 ## Accuracy discipline
 
 A `web_search` snippet is a lead, not a fact — this bit Caden for real once:
