@@ -89,35 +89,6 @@ fi
 run_step "Installing dependencies" npm ci
 run_step "Installing Playwright's Chromium (+ system deps)" bash -c "npx playwright install --with-deps chromium"
 
-# ── Local TTS (Piper) ────────────────────────────────────────────────────
-# Piper is a fast, fully local neural TTS engine — no cloud call, no API
-# key, nothing to configure (see src/piper.ts: two earlier attempts, a
-# hosted Gemini API and then Puter.js's browser-only SDK, both got dropped
-# in favor of this). Installed into its own venv rather than a system/--user
-# pip install, since Raspberry Pi OS Bookworm's Python refuses plain pip
-# installs into the system interpreter (PEP 668) — a venv sidesteps that
-# cleanly rather than needing --break-system-packages, which isn't even
-# available on every pip version.
-PIPER_VENV="$HOME/.caden/piper-venv"
-PIPER_VOICES_DIR="$HOME/.caden/piper-voices"
-PIPER_VOICE="en_US-ryan-medium"
-
-run_step "Installing Python venv/pip tools" bash -c "${SUDO} apt-get install -y python3-venv python3-pip"
-
-if [ ! -x "$PIPER_VENV/bin/python3" ]; then
-  run_step "Creating Piper's Python virtualenv" python3 -m venv "$PIPER_VENV"
-else
-  printf "  %sOK%s Piper virtualenv already present\n" "$C_GREEN" "$C_RESET"
-fi
-run_step "Installing Piper TTS" bash -c "'$PIPER_VENV/bin/pip' install --quiet --upgrade pip 'piper-tts[http]'"
-
-if [ ! -f "$PIPER_VOICES_DIR/$PIPER_VOICE.onnx" ]; then
-  mkdir -p "$PIPER_VOICES_DIR"
-  run_step "Downloading the ${PIPER_VOICE} voice" bash -c "'$PIPER_VENV/bin/python3' -m piper.download_voices --data-dir '$PIPER_VOICES_DIR' '$PIPER_VOICE'"
-else
-  printf "  %sOK%s Voice %s already downloaded\n" "$C_GREEN" "$C_RESET" "$PIPER_VOICE"
-fi
-
 # screenshot_desktop and the desktop-mirroring live view need a whole-screen
 # capture tool. Installing both a Wayland one (grim — Raspberry Pi OS's
 # default labwc desktop is Wayland) and an X11 one (scrot) covers either

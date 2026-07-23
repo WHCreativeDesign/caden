@@ -16,8 +16,9 @@ lives in this repo and runs on the Pi itself.
 
 Canvas mode is cut for now — a deliberate scope narrowing to focus on the
 chat experience, a good transparent single conversational surface, before
-it comes back, if it does. Voice (local TTS reading replies aloud) came
-back — see "Voice (Piper text-to-speech, local)" below.
+it comes back, if it does. Voice (TTS reading replies aloud) has been
+tried a few times (SAM, Gemini, Puter.js, Piper) and dropped each time —
+currently cut, see "What's not wired up yet" below.
 
 ---
 
@@ -51,7 +52,6 @@ src/
   env.ts                 — shared .env loader used by both index.ts and cli.ts
   agent.ts                — the tool-calling agent loop, personas (caden/researcher/scout)
   providers.ts              — Groq/Gemini key cycling (in-memory, single-user — no DB)
-  piper.ts                   — local TTS: keeps a resident Piper HTTP server, no cloud/API key
   server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/sfx
   activity.ts                 — tracks in-flight chat turns so self-update waits for idle before restarting
   logbus.ts                    — forwards all console output into the System Log panel + buffers it since boot
@@ -177,11 +177,11 @@ otherwise need to SSH in and either edit `.env` + restart, or poke at with
 `curl`, for. Every control there is backed by a real endpoint, not a fake
 toggle:
 
-- **Audio** — the SFX On/Off toggle (moved here from the Session panel), a
-  separate Voice (Piper TTS) On/Off toggle, six "test sound" buttons that
-  hit `POST /api/sfx/test {event}` to fire any of the six status sounds
-  immediately without needing a real chat turn, and a live readout of the
-  current lookahead/compensation values (see Status SFX below).
+- **Audio** — the SFX On/Off toggle (moved here from the Session panel), six
+  "test sound" buttons that hit `POST /api/sfx/test {event}` to fire any of
+  the six status sounds immediately without needing a real chat turn, and a
+  live readout of the current lookahead/compensation values (see Status SFX
+  below). No Voice/TTS toggle — see "What's not wired up yet" below.
 - **Browser** — a mode override (`POST /api/browser/mode`) that beats
   `BROWSER_MODE` from `.env` at runtime (`setModeOverride` in
   `tools/browser.ts`), plus a Restart button (`POST /api/browser/restart` →
@@ -265,8 +265,7 @@ tool calls, every `[tool]` call with its clipped args and result (warn if
 the result carried an `error`), the final `[agent] reply`, and the
 round-cap case; `providers.ts`'s `llm()` logs which `[llm]` provider/model
 answered, a Groq→Gemini fallback, per-key 429 backoffs, and the
-all-providers-failed case; `/api/tts` logs synthesis; and a due
-`[reminder]` logs when it fires. Keep new work on this path logging in the
+all-providers-failed case; and a due `[reminder]` logs when it fires. Keep new work on this path logging in the
 same shape — a bare `[stage] what happened` line — so the panel stays a
 real-time trace of a turn rather than going quiet mid-request.
 
@@ -578,80 +577,19 @@ with zero further calls — and in a real headless browser, the
 `AudioBufferSourceNode` was confirmed to start with `loop=true` and receive
 an explicit `.stop()` call the instant a `success` event arrived.
 
-## Voice (Piper text-to-speech, local)
+## Voice (dropped, for now)
 
-Caden's replies are read aloud via Piper (https://github.com/OHF-Voice/piper1-gpl)
-— a fast neural TTS engine that runs entirely on this Pi. This is the third
-engine this feature has used, in order: an early local engine (SAM, a
-vanilla-JS port of the 1982 C64 TTS chip), then Gemini's hosted Interactions
-API, then briefly Puter.js's browser-only SDK, now Piper. Gemini was dropped
-after its request shape changed twice on short notice, costing real
-debugging time each time; Puter was dropped because `puter.ai.txt2speech()`
-only runs inside a loaded browser page (it authenticates its own anonymous
-session client-side), which meant Telegram's server-side voice replies
-couldn't use it at all. Piper has no such split — no API key, no per-reply
-network call, no CDN dependency in the frontend, and it powers both the web
-UI and Telegram from the same local process.
-
-`src/piper.ts` keeps a single long-lived `python3 -m piper.http_server`
-process resident for the life of the daemon — same reasoning as
-`browser.ts`'s one long-lived Chromium instance: the Python interpreter +
-onnxruntime import + model load cost real, noticeable time on a Pi 4B, so
-that cost is paid once rather than on every reply. `synthesizeSpeech(text)`
-lazily spawns it on first use (`ensureServer()`, polling `GET /info` until
-ready rather than trusting a fixed delay), then POSTs `{ text, voice,
-length_scale, noise_scale, noise_w_scale }` to `POST /synthesize` on
-`127.0.0.1:5051` and gets a real WAV file back directly — unlike Gemini's
-headerless PCM, no manual WAV-header wrapping is needed. The resident
-process is killed on the way out (`exit`/`SIGTERM`/`SIGINT` handlers) so
-self-update's `process.exit(0)` restarts don't leave orphaned Python
-processes accumulating on a 4GB Pi over time; the `SIGTERM`/`SIGINT`
-handlers explicitly call `process.exit()` after cleanup rather than just
-killing the child, since registering a bare listener for those signals
-would otherwise silently replace Node's default terminate-immediately
-behavior and leave `systemctl stop/restart caden` hanging until SIGKILL.
-
-**Voice and delivery.** Defaults to `en_US-ryan-medium` — a deep, clear
-Piper voice deliberately not one of the ubiquitous Google/AWS assistant
-voices; "medium" quality is the speed/quality balance point that still runs
-comfortably on a Pi 4B (the "high" tier models can take multiple seconds per
-reply on this hardware). `length_scale`/`noise_scale`/`noise_w_scale` are
-pushed down from Piper's natural defaults for a flatter, steadier,
-monotone/soft-spoken/clear read rather than Piper's normal expressive
-delivery. All four are overridable in `.env`
-(`PIPER_VOICE`/`PIPER_LENGTH_SCALE`/`PIPER_NOISE_SCALE`/`PIPER_NOISE_W_SCALE`
-— see `.env.example`); a different `PIPER_VOICE` needs its model downloaded
-first (`scripts/install.sh` handles the default automatically — see its
-"Local TTS (Piper)" step for the manual command for any other voice).
-Installed into its own venv (`~/.caden/piper-venv`) rather than a system or
-`--user` pip install, since Raspberry Pi OS Bookworm's Python refuses plain
-pip installs into the system interpreter (PEP 668).
-
-**Web UI:** `POST /api/tts { text }` (`server.ts`) calls `synthesizeSpeech`
-and returns the WAV bytes directly as the response body
-(`Content-Type: audio/wav`) rather than base64-in-JSON — `speakCaden()` in
-`index.html` `fetch()`es it, `audioCtx.decodeAudioData()`s the response,
-and plays it through the same `AudioContext` the status-SFX system already
-unlocks on the first Send click (`ensureAudioCtx`). Synthesis + decode is
-async, so a fast follow-up message (or muting TTS mid-flight) could
-otherwise race and overlap two replies — each `speakCaden()` call is
-tagged with an incrementing `speechRequestId` and a stale response is
-dropped rather than played. TTS has its own On/Off toggle in the Options
-tab (`localStorage`-persisted, independent of the status SFX toggle) —
-turning it off calls `stopSpeech()`, which stops whatever's currently
-playing via the `AudioBufferSourceNode`'s own `.stop()`.
-
-**Telegram:** `sendVoiceReply` in `telegram.ts` calls the same
-`synthesizeSpeech` directly from Node (no browser involved) and posts the
-resulting WAV via `sendAudio` (see the Telegram section below).
-
-**The "Kayden" pronunciation note.** The old SAM engine's crude reciter
-rules mispronounced "Caden" as "CAD-en", so `speakCaden`/`sendVoiceReply`'s
-text got a `\bcaden\b` → `Kayden` respelling before reaching the TTS
-engine. That respelling has carried through every engine since, now inside
-Piper's `synthesizeSpeech` (`piper.ts`) so both callers get it for free —
-cheap, harmless insurance, not confirmation any particular engine actually
-has the bug SAM did.
+Caden's replies are text-only again — no TTS. This feature has been tried
+four times (SAM, a vanilla-JS port of the 1982 C64 TTS chip; Gemini's hosted
+Interactions API; Puter.js's browser-only SDK; Piper, a local neural engine)
+and dropped each time, most recently Piper: it worked, but was cut anyway to
+simplify the surface area rather than for a technical reason. If it comes
+back, check git history for the Piper implementation
+(`src/piper.ts`, `POST /api/tts` in `server.ts`, `speakCaden()` in
+`index.html`, `sendVoiceReply()` in `telegram.ts`) before rebuilding from
+scratch — the hard parts (a resident local TTS server process, the
+`speechRequestId` race guard, the `SIGTERM`/`SIGINT` exit-handling pitfall)
+are already solved there.
 
 **Troubleshooting no sound from the Pi's speaker/headphone jack.**
 `playLocal()` in `sfx.ts` used to swallow every failure silently — total
@@ -696,15 +634,11 @@ needing a public HTTPS webhook, since a home Pi behind NAT has neither.
 API has no access to Telegram's actual VOIP calls at all; those are
 end-to-end encrypted client-to-client and never exposed to bots, by
 Telegram's own design, not a limitation of this implementation. The
-feasible (and implemented) equivalent is **voice notes**: send Caden a
-voice message, it transcribes it (Groq Whisper — `transcribeAudio` in
-`providers.ts`, reusing the exact same Groq key pool as chat rather than a
-separate service/key) and replies with both a text message and a
-synthesized voice note (`synthesizeSpeech` in `piper.ts` — the same local
-Piper TTS the web UI uses, called directly from Node, no browser
-involved) sent via `sendAudio` rather than the stricter `sendVoice`, which
-requires actual OGG/Opus and would need an ffmpeg re-encode the plain WAV
-`synthesizeSpeech` returns doesn't need otherwise.
+feasible equivalent is **voice notes in**: send Caden a voice message, it
+transcribes it (Groq Whisper — `transcribeAudio` in `providers.ts`, reusing
+the exact same Groq key pool as chat rather than a separate service/key)
+and replies with a text message. No voice reply back — TTS is dropped for
+now (see "Voice (dropped, for now)" above).
 
 **Access control is deny-by-default, deliberately.** This bot has the same
 full, unrestricted shell/browser access as the web UI — an unauthenticated
@@ -784,23 +718,6 @@ handler increment/decrement around the agent-turn call; `checkOnce()` in
 every second, capped at `RESTART_WAIT_CAP_MS`, 4 minutes — a bit longer
 than the chat retry budget) before exiting, rather than restarting straight
 through an active request.
-
-**This coverage had a gap: `/api/tts` wasn't tracked.** `speakCaden()` in
-the web UI fires `POST /api/tts` *after* `/api/chat` has already returned
-— by the time speech synthesis is in flight, the `/api/chat` handler has
-already called `markIdle()`. Since only `/api/chat` and Telegram's message
-handler touched `markBusy`/`markIdle`, `isBusy()` had no idea a synthesis
-request was still running, so a self-update landing in that window would
-restart immediately: killing the in-flight `/api/tts` connection, and
-worse, leaving the server briefly and genuinely down while systemd
-relaunches it — during which the person's *next* chat message (sent
-moments after the reply they just heard) would get exactly the same bare
-`Failed to fetch`, with a freshly-reset uptime making it look like nothing
-was ever wrong. `/api/tts` now calls `markBusy`/`markIdle` too (`server.ts`),
-so self-update's "wait for idle" check actually accounts for speech
-synthesis, not just the chat turn that triggered it. (Telegram's
-`sendVoiceReply` never had this gap — it's already awaited inside the same
-`markBusy`/`markIdle` window as the chat turn, in `telegram.ts`.)
 
 **The `markBusy` guard can't cover the restart *downtime* itself — the web
 UI rides it out instead.** `markBusy`/`isBusy` only defers the restart
@@ -882,6 +799,9 @@ This is worth treating as a deliberate, explicit decision, not a quick
   the household can reach; it stops being fine the moment this UI is made
   reachable from the public internet (a port-forward, a tunnel, anything
   that isn't LAN-only) without adding real auth first.
-- Canvas mode — deliberately cut this pass. Voice came back (local Piper TTS).
+- Canvas mode — deliberately cut this pass.
+- Voice (TTS) — tried four times (SAM, Gemini, Puter.js, Piper), dropped
+  each time; currently text-only. See "Voice (dropped, for now)" above if
+  rebuilding it.
 - The old stub-only home-automation/Twilio tool ideas from an even earlier
   prototype were never resurrected and aren't planned.

@@ -87,27 +87,91 @@
   .footer   { animation: reveal 0.8s 0.85s var(--ease) both; }
   @keyframes reveal { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-  /* ── The node mark — connected rounded squares assembling on load.
-        The brand IS this cluster: eight modules on a 4×4 grid that snap
-        into place one by one on a non-linear stagger, then idle with a
-        slow sequential pulse, like current moving through a circuit. ── */
-  .mark { display: grid; grid-template-columns: repeat(4, 13px); grid-template-rows: repeat(4, 13px); }
-  .mark i { border-radius: var(--sq); }
+  /* ── The node mark — a liquid circuit. Eight blobs that ooze in on load,
+        then drift on their own independent, non-linear paths forever after:
+        each one wanders toward a neighboring module's spot and back (or
+        onward to a third), morphing its own outline the whole time. The
+        SVG goo filter (#caden-goo, defined once near the top of <body>) is
+        what actually sells "liquid" — when two blobs' blurred edges get
+        close, the filter's contrast pass fuses them into one shape before
+        they separate again, rather than two solid circles just overlapping.
+        Pure CSS/SVG, no JS, no per-frame layout cost. ── */
+  .mark { position: relative; width: 56px; height: 56px; filter: url(#caden-goo); }
   .mark i.f {
+    position: absolute; top: 0; left: 0; width: 15px; height: 15px;
     background: var(--wht);
-    animation: snap 0.4s var(--ease) both, node-idle 6s ease-in-out infinite;
+    border-radius: 44% 56% 52% 48% / 48% 44% 56% 52%;
+    animation: ooze-in 0.7s var(--ease) both, node-idle 6s ease-in-out infinite;
   }
-  /* checker-connected layout, corner-to-corner like a circuit trace */
-  .mark i.f:nth-of-type(1)  { grid-area: 1 / 1; animation-delay: 0.00s, 1.2s; }
-  .mark i.f:nth-of-type(2)  { grid-area: 1 / 3; animation-delay: 0.35s, 2.6s; }
-  .mark i.f:nth-of-type(3)  { grid-area: 2 / 2; animation-delay: 0.10s, 1.9s; }
-  .mark i.f:nth-of-type(4)  { grid-area: 2 / 4; animation-delay: 0.50s, 3.3s; }
-  .mark i.f:nth-of-type(5)  { grid-area: 3 / 1; animation-delay: 0.28s, 4.0s; }
-  .mark i.f:nth-of-type(6)  { grid-area: 3 / 3; animation-delay: 0.16s, 4.7s; }
-  .mark i.f:nth-of-type(7)  { grid-area: 4 / 2; animation-delay: 0.44s, 5.4s; }
-  .mark i.f:nth-of-type(8)  { grid-area: 4 / 4; animation-delay: 0.22s, 6.1s; }
-  @keyframes snap { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
-  @keyframes node-idle { 0%, 100% { opacity: 1; } 6% { opacity: 0.35; } 12% { opacity: 1; } }
+  /* Base grid spot (checker layout, corner-to-corner like a circuit trace)
+     plus its own drift keyframes and duration — every blob's loop length is
+     mutually prime-ish with its neighbors' so the cluster never visibly
+     repeats as a whole, only each part quietly recurring on its own clock. */
+  .mark i.f:nth-of-type(1) { top: 0px;  left: 0px;  animation-name: ooze-in, drift-1; animation-duration: 0.7s, 10.5s; animation-delay: 0.00s, 0.7s; }
+  .mark i.f:nth-of-type(2) { top: 0px;  left: 28px; animation-name: ooze-in, drift-2; animation-duration: 0.7s, 12.5s; animation-delay: 0.35s, 1.05s; }
+  .mark i.f:nth-of-type(3) { top: 14px; left: 14px; animation-name: ooze-in, drift-3; animation-duration: 0.7s, 9s;   animation-delay: 0.10s, 0.8s; }
+  .mark i.f:nth-of-type(4) { top: 14px; left: 42px; animation-name: ooze-in, drift-4; animation-duration: 0.7s, 13.5s; animation-delay: 0.50s, 1.2s; }
+  .mark i.f:nth-of-type(5) { top: 28px; left: 0px;  animation-name: ooze-in, drift-5; animation-duration: 0.7s, 11.5s; animation-delay: 0.28s, 0.98s; }
+  .mark i.f:nth-of-type(6) { top: 28px; left: 28px; animation-name: ooze-in, drift-6; animation-duration: 0.7s, 8.5s;  animation-delay: 0.16s, 0.86s; }
+  .mark i.f:nth-of-type(7) { top: 42px; left: 14px; animation-name: ooze-in, drift-7; animation-duration: 0.7s, 14s;   animation-delay: 0.44s, 1.14s; }
+  .mark i.f:nth-of-type(8) { top: 42px; left: 42px; animation-name: ooze-in, drift-8; animation-duration: 0.7s, 10s;   animation-delay: 0.22s, 0.92s; }
+
+  @keyframes ooze-in { from { opacity: 0; transform: scale(0); border-radius: 50%; } to { opacity: 1; transform: scale(1); } }
+  @keyframes node-idle { 0%, 100% { opacity: 1; } 6% { opacity: 0.45; } 12% { opacity: 1; } }
+
+  /* Each drift-N wanders toward an adjacent module's base spot (the "swap")
+     and on to a second neighbor before looping home, wobbling its own
+     border-radius the entire time for the liquify feel — never a plain
+     circle, never symmetric. Distances are sized so two blobs' blurred
+     edges actually touch mid-path under the goo filter. */
+  @keyframes drift-1 {
+    0%   { transform: translate(0, 0)     scale(1);    border-radius: 44% 56% 52% 48% / 48% 44% 56% 52%; }
+    30%  { transform: translate(12px, 11px) scale(1.15); border-radius: 60% 40% 45% 55% / 55% 60% 40% 45%; }
+    62%  { transform: translate(3px, 22px)  scale(0.92); border-radius: 38% 62% 58% 42% / 45% 38% 62% 55%; }
+    100% { transform: translate(0, 0)     scale(1);    border-radius: 44% 56% 52% 48% / 48% 44% 56% 52%; }
+  }
+  @keyframes drift-2 {
+    0%   { transform: translate(0, 0)      scale(1);    border-radius: 48% 52% 44% 56% / 44% 56% 52% 48%; }
+    35%  { transform: translate(-13px, 12px) scale(1.1);  border-radius: 55% 45% 60% 40% / 50% 55% 45% 60%; }
+    68%  { transform: translate(-2px, -10px) scale(0.9);  border-radius: 42% 58% 46% 54% / 60% 42% 58% 46%; }
+    100% { transform: translate(0, 0)      scale(1);    border-radius: 48% 52% 44% 56% / 44% 56% 52% 48%; }
+  }
+  @keyframes drift-3 {
+    0%   { transform: translate(0, 0)       scale(1);    border-radius: 52% 48% 56% 44% / 46% 52% 48% 54%; }
+    28%  { transform: translate(-12px, -11px) scale(1.18); border-radius: 40% 60% 42% 58% / 58% 40% 60% 42%; }
+    58%  { transform: translate(13px, 3px)     scale(0.94); border-radius: 62% 38% 55% 45% / 42% 62% 38% 58%; }
+    100% { transform: translate(0, 0)       scale(1);    border-radius: 52% 48% 56% 44% / 46% 52% 48% 54%; }
+  }
+  @keyframes drift-4 {
+    0%   { transform: translate(0, 0)      scale(1);    border-radius: 46% 54% 50% 50% / 52% 46% 54% 48%; }
+    33%  { transform: translate(13px, -12px) scale(1.12); border-radius: 58% 42% 62% 38% / 44% 58% 42% 56%; }
+    64%  { transform: translate(-3px, 9px)   scale(0.9);  border-radius: 40% 60% 38% 62% / 56% 40% 60% 44%; }
+    100% { transform: translate(0, 0)      scale(1);    border-radius: 46% 54% 50% 50% / 52% 46% 54% 48%; }
+  }
+  @keyframes drift-5 {
+    0%   { transform: translate(0, 0)      scale(1);    border-radius: 50% 50% 46% 54% / 54% 46% 50% 50%; }
+    38%  { transform: translate(11px, -12px) scale(1.16); border-radius: 62% 38% 58% 42% / 40% 62% 38% 58%; }
+    70%  { transform: translate(-4px, 2px)   scale(0.93); border-radius: 44% 56% 40% 60% / 58% 44% 56% 42%; }
+    100% { transform: translate(0, 0)      scale(1);    border-radius: 50% 50% 46% 54% / 54% 46% 50% 50%; }
+  }
+  @keyframes drift-6 {
+    0%   { transform: translate(0, 0)       scale(1);    border-radius: 54% 46% 48% 52% / 48% 54% 46% 52%; }
+    26%  { transform: translate(-11px, -13px) scale(1.14); border-radius: 42% 58% 62% 38% / 56% 42% 58% 40%; }
+    60%  { transform: translate(12px, -3px)   scale(0.91); border-radius: 60% 40% 44% 56% / 38% 60% 40% 62%; }
+    100% { transform: translate(0, 0)       scale(1);    border-radius: 54% 46% 48% 52% / 48% 54% 46% 52%; }
+  }
+  @keyframes drift-7 {
+    0%   { transform: translate(0, 0)      scale(1);    border-radius: 48% 52% 54% 46% / 50% 48% 52% 46%; }
+    32%  { transform: translate(-13px, 11px) scale(1.13); border-radius: 60% 40% 38% 62% / 44% 60% 40% 58%; }
+    66%  { transform: translate(2px, -9px)   scale(0.92); border-radius: 38% 62% 60% 40% / 62% 38% 62% 40%; }
+    100% { transform: translate(0, 0)      scale(1);    border-radius: 48% 52% 54% 46% / 50% 48% 52% 46%; }
+  }
+  @keyframes drift-8 {
+    0%   { transform: translate(0, 0)      scale(1);    border-radius: 46% 54% 44% 56% / 56% 46% 54% 44%; }
+    29%  { transform: translate(12px, -11px) scale(1.17); border-radius: 58% 42% 60% 40% / 42% 58% 42% 60%; }
+    61%  { transform: translate(-10px, 4px)  scale(0.9);  border-radius: 40% 60% 42% 58% / 60% 40% 58% 42%; }
+    100% { transform: translate(0, 0)      scale(1);    border-radius: 46% 54% 44% 56% / 56% 46% 54% 44%; }
+  }
 
   /* ── Header ─────────────────────────────────────────────────────────── */
   .header {
@@ -379,11 +443,27 @@
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
-    .mark i.f { animation: none; opacity: 1; transform: none; }
+    .mark i.f { animation: none; opacity: 1; transform: none; border-radius: 44% 56% 52% 48% / 48% 44% 56% 52%; }
   }
 </style>
 </head>
 <body>
+<!-- Goo filter for the header's liquid node mark (see .mark in <style>)
+     — blurs everything drawn inside, then a steep alpha-contrast pass turns
+     that blur back into a hard edge, so two blobs whose blurred haze
+     overlaps get rendered as one fused shape instead of two circles
+     touching. Zero-size and aria-hidden: this SVG paints nothing on its
+     own, it only supplies the filter definition referenced by CSS. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="caden-goo">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+      <feColorMatrix in="blur" mode="matrix"
+        values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -10" result="goo" />
+      <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+    </filter>
+  </defs>
+</svg>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
 <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
@@ -493,10 +573,6 @@
             <div class="opt-row">
               <span class="k">Status SFX</span>
               <span class="ctl"><button class="btn" id="optSfxBtn">On</button></span>
-            </div>
-            <div class="opt-row">
-              <span class="k">Voice (Piper TTS)<small>Reads Caden's replies aloud, synthesized locally on this Pi</small></span>
-              <span class="ctl"><button class="btn" id="optTtsBtn">On</button></span>
             </div>
             <div class="opt-row">
               <span class="k">Test a sound<small>Plays locally right now, no chat turn needed</small></span>
@@ -663,7 +739,7 @@
   const linkDot = $('linkDot'), linkText = $('linkText'), sysText = $('sysText');
   const keySeg = $('keySeg');
   const tMainframe = $('tMainframe'), tSha = $('tSha'), tUptime = $('tUptime'), tGroq = $('tGroq'), tGemini = $('tGemini'), tBrowser = $('tBrowser'), tClock = $('tClock');
-  const optSfxBtn = $('optSfxBtn'), optTtsBtn = $('optTtsBtn'), optBrowserMode = $('optBrowserMode'), optBrowserRestart = $('optBrowserRestart');
+  const optSfxBtn = $('optSfxBtn'), optBrowserMode = $('optBrowserMode'), optBrowserRestart = $('optBrowserRestart');
   const optUpdateInterval = $('optUpdateInterval'), optCheckNow = $('optCheckNow'), optUpdateMeta = $('optUpdateMeta');
   const optMemorySummary = $('optMemorySummary'), optForget = $('optForget'), optRawStatus = $('optRawStatus');
   const optSfxTiming = $('optSfxTiming');
@@ -907,7 +983,6 @@
       live.metaEl.textContent = metaLine;
       log.push({ role: 'assistant', text: reply, thinking, steps, meta: { line: metaLine } });
       save();
-      speakCaden(reply);
       await typewriter(live.body, reply);
     } catch (err) {
       trace.el.remove();
@@ -927,7 +1002,6 @@
         live.metaEl.textContent = 'ERROR';
         log.push({ role: 'assistant', text: message, err: true, meta: { line: 'ERROR' } });
         save();
-        speakCaden(message);
       }
     } finally {
       clearInterval(sysTimer);
@@ -1204,65 +1278,6 @@
     };
     sfxWs.onclose = () => setTimeout(connectSfxWs, 3000);
     sfxWs.onerror = () => sfxWs.close();
-  }
-
-  // ── Voice (Piper TTS) ──────────────────────────────────────────────────
-  // Reads Caden's replies aloud via Piper, a local neural TTS engine that
-  // runs entirely on this Pi (see synthesizeSpeech in piper.ts) — no cloud
-  // call, no API key, no CDN dependency here. The server does the actual
-  // synthesis and hands back a plain .wav; this just decodes and plays it
-  // through the same AudioContext the SFX system already unlocks
-  // (ensureAudioCtx above). This is also what Telegram's voice replies use
-  // server-side, so both channels share one engine again.
-  let ttsEnabled = true;
-  try { ttsEnabled = localStorage.getItem('caden.tts') !== 'off'; } catch {}
-  let speechSource = null;
-  let speechRequestId = 0;
-
-  function setTtsBtn() {
-    optTtsBtn.textContent = ttsEnabled ? 'On' : 'Off';
-    optTtsBtn.setAttribute('aria-pressed', String(ttsEnabled));
-    optTtsBtn.style.opacity = ttsEnabled ? '1' : '0.55';
-  }
-  setTtsBtn();
-  optTtsBtn.addEventListener('click', () => {
-    ttsEnabled = !ttsEnabled;
-    try { localStorage.setItem('caden.tts', ttsEnabled ? 'on' : 'off'); } catch {}
-    setTtsBtn();
-    if (!ttsEnabled) stopSpeech();
-  });
-
-  function stopSpeech() {
-    if (speechSource) { try { speechSource.stop(); } catch {} speechSource = null; }
-  }
-
-  async function speakCaden(text) {
-    if (!ttsEnabled || !text) return;
-    stopSpeech();
-    ensureAudioCtx();
-    // Synthesis + decode is async — a fast follow-up message (or muting TTS
-    // mid-flight) can outrace this. Tag each call so a stale response never
-    // starts talking over a newer one.
-    const myRequest = ++speechRequestId;
-    try {
-      const resp = await fetch('/api/tts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      if (!resp.ok || myRequest !== speechRequestId || !ttsEnabled) return;
-      const buf = await resp.arrayBuffer();
-      if (myRequest !== speechRequestId || !ttsEnabled) return;
-      const decoded = await audioCtx.decodeAudioData(buf);
-      if (myRequest !== speechRequestId || !ttsEnabled) return;
-      const src = audioCtx.createBufferSource();
-      src.buffer = decoded;
-      src.connect(audioCtx.destination);
-      speechSource = src;
-      src.start();
-    } catch {
-      // Network hiccup or the local piper server isn't up yet — skip speech
-      // silently; the text reply already rendered regardless.
-    }
   }
 
   // ── Reminders ─────────────────────────────────────────────────────────────

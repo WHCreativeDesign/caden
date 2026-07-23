@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { AgentName, agentLabel, compactHistoryIfNeeded, runAgentTurnRetrying } from "./agent.js";
 import { providerStatus } from "./providers.js";
-import { synthesizeSpeech } from "./piper.js";
 import { auditEvents } from "./tools/shell.js";
 import { logHistory } from "./logbus.js";
 import { browserStatus, setModeOverride, closeBrowser } from "./tools/browser.js";
@@ -89,36 +88,6 @@ export function startServer() {
 
   app.get("/api/reminders", (_req, res) => {
     res.json({ reminders: listReminders() });
-  });
-
-  // Speaks Caden's reply via Piper, a local TTS engine running entirely on
-  // this Pi (see synthesizeSpeech in piper.ts), and hands back a real .wav
-  // file rather than base64-in-JSON — the browser just fetch()es it and
-  // decodeAudioData()s the response body directly.
-  app.post("/api/tts", async (req, res) => {
-    const text = String(req.body?.text ?? "").trim();
-    if (!text) return res.status(400).json({ error: "`text` must be a non-empty string" });
-    // markBusy/markIdle here too, not just /api/chat: speakCaden() in the
-    // web UI fires this the instant a chat reply lands, right after that
-    // /api/chat request already marked itself idle — so without this, the
-    // self-update watcher's "wait for in-flight requests before restarting"
-    // check (activity.ts / update.ts) is blind to a synthesis request still
-    // in flight. It would see idle, restart immediately, kill this
-    // connection, and — worse — leave a real gap where the server is briefly
-    // down for systemd to relaunch it, during which the person's very next
-    // message gets a raw "Failed to fetch" with no explanation.
-    markBusy();
-    try {
-      console.log(`[tts] synthesizing ${text.length} char${text.length === 1 ? "" : "s"} of speech`);
-      const wav = await synthesizeSpeech(text);
-      res.setHeader("Content-Type", "audio/wav");
-      res.send(wav);
-    } catch (err) {
-      console.error(`[tts] synthesis failed: ${String((err as Error).message ?? err).slice(0, 200)}`);
-      res.status(502).json({ error: String((err as Error).message ?? err) });
-    } finally {
-      markIdle();
-    }
   });
 
   // Telegram key management (Options tab) — see CLAUDE.md's Telegram
