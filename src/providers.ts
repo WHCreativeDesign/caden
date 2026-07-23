@@ -15,11 +15,18 @@ const GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1bet
 // this API surface already learned once: check the current model/endpoint
 // rather than assuming a remembered one still works.
 const GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview";
-// One of Google's deeper, clearer prebuilt voices — not scientifically
-// verified against a real ear in this sandbox (no audio hardware here), so
-// this is a starting pick, not a final judgment; swap via GEMINI_TTS_VOICE
-// if it doesn't land right. Other options: Puck, Kore, Fenrir, Orus, Iapetus.
+// A deep, clear male voice from Google's prebuilt set — Charon and Puck are
+// both documented as male-sounding; Charon reads calmer/more assistant-like.
+// Swap via GEMINI_TTS_VOICE if it doesn't land right (other male options:
+// Puck, Fenrir, Orus, Iapetus — Kore and Zephyr are female, avoid those for
+// a male voice).
 const DEFAULT_TTS_VOICE = "Charon";
+// The Interactions API versions its request/response shape by this header;
+// omitting it risks landing on whatever shape is "current" at request time,
+// which is exactly what silently broke this call once already (the API
+// moved speech_config from a top-level field to generation_config.speech_config,
+// an array of {voice} rather than a bare object — see synthesizeSpeech).
+const GEMINI_API_REVISION = "2026-05-20";
 
 // groqVision is a separate model id because Groq's everyday tool-calling
 // models (llama-3.3-70b-versatile etc.) don't take image input at all — but
@@ -251,7 +258,11 @@ export async function synthesizeSpeech(text: string): Promise<Buffer> {
     if (!key) throw new Error("no available gemini keys");
     const resp = await fetch(GEMINI_INTERACTIONS_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": key,
+        "Api-Revision": GEMINI_API_REVISION,
+      },
       body: JSON.stringify({
         model: GEMINI_TTS_MODEL,
         // "Caden" said plainly sometimes got mispronounced by the old SAM
@@ -260,8 +271,8 @@ export async function synthesizeSpeech(text: string): Promise<Buffer> {
         // voice, since "Kayden" is itself a common name said the same way
         // ("KAY-den") — cheap insurance, not a known Gemini bug.
         input: text.replace(/\bcaden\b/gi, "Kayden"),
-        response_modalities: ["audio"],
-        speech_config: { voice },
+        response_format: { type: "audio" },
+        generation_config: { speech_config: [{ voice }] },
       }),
     });
     if (resp.status === 429) {
@@ -272,9 +283,13 @@ export async function synthesizeSpeech(text: string): Promise<Buffer> {
     }
     if (!resp.ok) throw new Error(`gemini tts error ${resp.status}: ${await resp.text()}`);
     const data: any = await resp.json();
+    // Content items in a step are tagged by a "type" field ("text", "audio",
+    // "image", ...) rather than keyed by object name — this replaced the
+    // older inline_data.{data,mime_type} shape when the request format above
+    // changed. Data/mime_type sit directly on the audio item.
     const part = (data.steps ?? [])
       .flatMap((s: any) => s.content ?? [])
-      .find((c: any) => c.inline_data)?.inline_data;
+      .find((c: any) => c.type === "audio" && c.data);
     if (!part?.data) throw new Error("gemini tts response had no audio data");
     const { sampleRate, channels } = parsePcmMime(part.mime_type || "");
     return pcmToWav(Buffer.from(part.data, "base64"), sampleRate, channels, 16);
