@@ -12,6 +12,14 @@
      Left as "/" (the default — same as no <base> at all) when served
      directly by the Pi, so local use is completely unaffected. -->
 <base id="apiBase" href="/">
+<!-- The one deliberate exception to this file's "no CDN dependencies" rule
+     (see CLAUDE.md) — Puter's TTS (js.puter.com) is a client-side-only SDK:
+     it authenticates an anonymous browser session itself, and has no stable
+     server-side API this daemon could call from Node instead (see the
+     "Voice (Puter TTS)" section of the script below for why). Loading it
+     here, once, is what lets speakCaden() call puter.ai.txt2speech()
+     directly in the browser. -->
+<script src="https://js.puter.com/v2/"></script>
 <style>
   /* ── CADEN · precision-engineered domestic intelligence ───────────────
      Monochrome industrial system: pure black, pure white, hairline rules.
@@ -495,7 +503,7 @@
               <span class="ctl"><button class="btn" id="optSfxBtn">On</button></span>
             </div>
             <div class="opt-row">
-              <span class="k">Voice (Gemini TTS)<small>Reads Caden's replies aloud</small></span>
+              <span class="k">Voice (Puter TTS)<small>Reads Caden's replies aloud, in the browser</small></span>
               <span class="ctl"><button class="btn" id="optTtsBtn">On</button></span>
             </div>
             <div class="opt-row">
@@ -1206,15 +1214,19 @@
     sfxWs.onerror = () => sfxWs.close();
   }
 
-  // ── Voice (Gemini TTS) ─────────────────────────────────────────────────
-  // Reads Caden's replies aloud via Gemini's TTS (see synthesizeSpeech in
-  // providers.ts) — the server does the actual synthesis, reusing the same
-  // GEMINI_API_KEYS pool as chat, and hands back a plain .wav; this just
-  // decodes and plays it through the same AudioContext the SFX system
-  // already unlocks (ensureAudioCtx above).
+  // ── Voice (Puter TTS) ──────────────────────────────────────────────────
+  // Reads Caden's replies aloud entirely client-side via Puter.js
+  // (puter.ai.txt2speech — see the <script src="https://js.puter.com/v2/">
+  // tag in <head> and its comment for why this never touches Caden's own
+  // server). Puter authenticates its own anonymous browser session and
+  // returns a playable HTMLAudioElement directly — no AudioContext/
+  // decodeAudioData needed the way the old Gemini-backed /api/tts path
+  // required. Telegram's voice replies are unaffected: they stay on Gemini
+  // TTS (synthesizeSpeech in providers.ts) since that path runs server-side
+  // with no browser, and Puter's SDK doesn't run in plain Node.
   let ttsEnabled = true;
   try { ttsEnabled = localStorage.getItem('caden.tts') !== 'off'; } catch {}
-  let speechSource = null;
+  let speechAudio = null;
   let speechRequestId = 0;
 
   function setTtsBtn() {
@@ -1231,35 +1243,41 @@
   });
 
   function stopSpeech() {
-    if (speechSource) { try { speechSource.stop(); } catch {} speechSource = null; }
+    if (speechAudio) { try { speechAudio.pause(); } catch {} speechAudio = null; }
   }
 
   async function speakCaden(text) {
-    if (!ttsEnabled || !text) return;
+    if (!ttsEnabled || !text || typeof puter === 'undefined') return;
     stopSpeech();
-    ensureAudioCtx();
-    // Synthesis + decode is async — a fast follow-up message (or muting TTS
+    // Synthesis is async — a fast follow-up message (or muting TTS
     // mid-flight) can outrace this. Tag each call so a stale response never
     // starts talking over a newer one.
     const myRequest = ++speechRequestId;
     try {
-      const resp = await fetch('/api/tts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+      // Same mispronunciation fix the Gemini path used to carry server-side
+      // ("Caden" read as "CAD-en" by cruder engines) — cheap insurance,
+      // done here now since speech never reaches the server at all.
+      const spoken = text.replace(/\bcaden\b/gi, 'Kayden');
+      // gpt-4o-mini-tts is the one Puter-exposed model that takes a plain-
+      // English "instructions" field for delivery style, which is what
+      // actually gets a *monotone, soft-spoken, clear* read rather than a
+      // picked-voice's default personality — a canned "voice" name alone
+      // (Polly, ElevenLabs) can't be steered the same way. Onyx is a deep,
+      // even OpenAI voice, kept consistent with the male-voice preference
+      // from the previous Gemini setup.
+      const audio = await puter.ai.txt2speech(spoken, {
+        provider: 'openai',
+        model: 'gpt-4o-mini-tts',
+        voice: 'onyx',
+        instructions: 'Speak in a calm, soft-spoken, clear, monotone voice — even pacing, minimal pitch variation, no dramatic emphasis.',
       });
-      if (!resp.ok || myRequest !== speechRequestId || !ttsEnabled) return;
-      const buf = await resp.arrayBuffer();
       if (myRequest !== speechRequestId || !ttsEnabled) return;
-      const decoded = await audioCtx.decodeAudioData(buf);
-      if (myRequest !== speechRequestId || !ttsEnabled) return;
-      const src = audioCtx.createBufferSource();
-      src.buffer = decoded;
-      src.connect(audioCtx.destination);
-      speechSource = src;
-      src.start();
+      speechAudio = audio;
+      audio.play();
     } catch {
-      // Network hiccup or no Gemini keys configured — skip speech silently;
-      // the text reply already rendered regardless.
+      // Puter unreachable (offline Pi, DNS hiccup, or its one-time
+      // anonymous sign-in prompt dismissed) — skip speech silently; the
+      // text reply already rendered regardless.
     }
   }
 
