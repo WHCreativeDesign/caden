@@ -16,8 +16,8 @@ lives in this repo and runs on the Pi itself.
 
 Canvas mode is cut for now — a deliberate scope narrowing to focus on the
 chat experience, a good transparent single conversational surface, before
-it comes back, if it does. Voice (Gemini TTS reading replies aloud) came
-back — see "Voice (Gemini text-to-speech)" below.
+it comes back, if it does. Voice (local TTS reading replies aloud) came
+back — see "Voice (Piper text-to-speech, local)" below.
 
 ---
 
@@ -51,6 +51,7 @@ src/
   env.ts                 — shared .env loader used by both index.ts and cli.ts
   agent.ts                — the tool-calling agent loop, personas (caden/researcher/scout)
   providers.ts              — Groq/Gemini key cycling (in-memory, single-user — no DB)
+  piper.ts                   — local TTS: keeps a resident Piper HTTP server, no cloud/API key
   server.ts                  — Express + ws: /api/chat, /api/status, /ws/log, /ws/sfx
   activity.ts                 — tracks in-flight chat turns so self-update waits for idle before restarting
   logbus.ts                    — forwards all console output into the System Log panel + buffers it since boot
@@ -177,7 +178,7 @@ otherwise need to SSH in and either edit `.env` + restart, or poke at with
 toggle:
 
 - **Audio** — the SFX On/Off toggle (moved here from the Session panel), a
-  separate Voice (Gemini TTS) On/Off toggle, six "test sound" buttons that
+  separate Voice (Piper TTS) On/Off toggle, six "test sound" buttons that
   hit `POST /api/sfx/test {event}` to fire any of the six status sounds
   immediately without needing a real chat turn, and a live readout of the
   current lookahead/compensation values (see Status SFX below).
@@ -577,27 +578,54 @@ with zero further calls — and in a real headless browser, the
 `AudioBufferSourceNode` was confirmed to start with `loop=true` and receive
 an explicit `.stop()` call the instant a `success` event arrived.
 
-## Voice (Gemini text-to-speech)
+## Voice (Piper text-to-speech, local)
 
-Caden's replies are read aloud via Gemini's TTS — `synthesizeSpeech` in
-`providers.ts` calls the Interactions API
-(`POST https://generativelanguage.googleapis.com/v1beta/interactions`,
-model `gemini-3.1-flash-tts-preview`, `x-goog-api-key` header) with
-`response_modalities: ["audio"]` and `speech_config: { voice }`, reusing
-the exact same `GEMINI_API_KEYS` pool as chat rather than a separate
-key/service. The response is raw headerless PCM (`audio/l16; rate=24000;
-channels=1` — no WAV container), so `synthesizeSpeech` wraps it in a real
-WAV header (`pcmToWav`) before handing it back, so every consumer can treat
-it as an ordinary playable file. Voice defaults to `Charon`, overridable
-with `GEMINI_TTS_VOICE` in `.env` (other options: Puck, Kore, Fenrir, Orus,
-Iapetus — this hasn't been judged against a real ear in this sandbox, so
-treat the default as a starting pick, not a final one).
+Caden's replies are read aloud via Piper (https://github.com/OHF-Voice/piper1-gpl)
+— a fast neural TTS engine that runs entirely on this Pi. This is the third
+engine this feature has used, in order: an early local engine (SAM, a
+vanilla-JS port of the 1982 C64 TTS chip), then Gemini's hosted Interactions
+API, then briefly Puter.js's browser-only SDK, now Piper. Gemini was dropped
+after its request shape changed twice on short notice, costing real
+debugging time each time; Puter was dropped because `puter.ai.txt2speech()`
+only runs inside a loaded browser page (it authenticates its own anonymous
+session client-side), which meant Telegram's server-side voice replies
+couldn't use it at all. Piper has no such split — no API key, no per-reply
+network call, no CDN dependency in the frontend, and it powers both the web
+UI and Telegram from the same local process.
 
-This replaced an earlier local engine (SAM, a vanilla-JS port of the 1982
-C64 TTS chip) after deciding a cloud neural voice was worth the tradeoff of
-a per-reply network call — SAM's `sam-js` dependency, `scripts/vendor-sam.sh`,
-and `public/vendor/samjs.min.js` were removed entirely rather than left
-around unused once both call sites (web UI, Telegram) moved to Gemini.
+`src/piper.ts` keeps a single long-lived `python3 -m piper.http_server`
+process resident for the life of the daemon — same reasoning as
+`browser.ts`'s one long-lived Chromium instance: the Python interpreter +
+onnxruntime import + model load cost real, noticeable time on a Pi 4B, so
+that cost is paid once rather than on every reply. `synthesizeSpeech(text)`
+lazily spawns it on first use (`ensureServer()`, polling `GET /info` until
+ready rather than trusting a fixed delay), then POSTs `{ text, voice,
+length_scale, noise_scale, noise_w_scale }` to `POST /synthesize` on
+`127.0.0.1:5051` and gets a real WAV file back directly — unlike Gemini's
+headerless PCM, no manual WAV-header wrapping is needed. The resident
+process is killed on the way out (`exit`/`SIGTERM`/`SIGINT` handlers) so
+self-update's `process.exit(0)` restarts don't leave orphaned Python
+processes accumulating on a 4GB Pi over time; the `SIGTERM`/`SIGINT`
+handlers explicitly call `process.exit()` after cleanup rather than just
+killing the child, since registering a bare listener for those signals
+would otherwise silently replace Node's default terminate-immediately
+behavior and leave `systemctl stop/restart caden` hanging until SIGKILL.
+
+**Voice and delivery.** Defaults to `en_US-ryan-medium` — a deep, clear
+Piper voice deliberately not one of the ubiquitous Google/AWS assistant
+voices; "medium" quality is the speed/quality balance point that still runs
+comfortably on a Pi 4B (the "high" tier models can take multiple seconds per
+reply on this hardware). `length_scale`/`noise_scale`/`noise_w_scale` are
+pushed down from Piper's natural defaults for a flatter, steadier,
+monotone/soft-spoken/clear read rather than Piper's normal expressive
+delivery. All four are overridable in `.env`
+(`PIPER_VOICE`/`PIPER_LENGTH_SCALE`/`PIPER_NOISE_SCALE`/`PIPER_NOISE_W_SCALE`
+— see `.env.example`); a different `PIPER_VOICE` needs its model downloaded
+first (`scripts/install.sh` handles the default automatically — see its
+"Local TTS (Piper)" step for the manual command for any other voice).
+Installed into its own venv (`~/.caden/piper-venv`) rather than a system or
+`--user` pip install, since Raspberry Pi OS Bookworm's Python refuses plain
+pip installs into the system interpreter (PEP 668).
 
 **Web UI:** `POST /api/tts { text }` (`server.ts`) calls `synthesizeSpeech`
 and returns the WAV bytes directly as the response body
@@ -620,12 +648,10 @@ resulting WAV via `sendAudio` (see the Telegram section below).
 **The "Kayden" pronunciation note.** The old SAM engine's crude reciter
 rules mispronounced "Caden" as "CAD-en", so `speakCaden`/`sendVoiceReply`'s
 text got a `\bcaden\b` → `Kayden` respelling before reaching the TTS
-engine. That respelling now happens once, inside `synthesizeSpeech` itself
-(so both callers get it for free) — kept as cheap, harmless insurance for
-Gemini's voice too, since "Kayden" is itself a common name said the same
-way ("KAY-den"), not because Gemini is known to have the same bug SAM did.
-If it turns out Gemini already says "Caden" correctly on its own, this can
-be dropped; nothing currently confirms it needs to be.
+engine. That respelling has carried through every engine since, now inside
+Piper's `synthesizeSpeech` (`piper.ts`) so both callers get it for free —
+cheap, harmless insurance, not confirmation any particular engine actually
+has the bug SAM did.
 
 **Troubleshooting no sound from the Pi's speaker/headphone jack.**
 `playLocal()` in `sfx.ts` used to swallow every failure silently — total
@@ -674,8 +700,8 @@ feasible (and implemented) equivalent is **voice notes**: send Caden a
 voice message, it transcribes it (Groq Whisper — `transcribeAudio` in
 `providers.ts`, reusing the exact same Groq key pool as chat rather than a
 separate service/key) and replies with both a text message and a
-synthesized voice note (`synthesizeSpeech` in `providers.ts` — the same
-Gemini TTS the web UI uses, called directly from Node, no browser
+synthesized voice note (`synthesizeSpeech` in `piper.ts` — the same local
+Piper TTS the web UI uses, called directly from Node, no browser
 involved) sent via `sendAudio` rather than the stricter `sendVoice`, which
 requires actual OGG/Opus and would need an ffmpeg re-encode the plain WAV
 `synthesizeSpeech` returns doesn't need otherwise.
@@ -856,6 +882,6 @@ This is worth treating as a deliberate, explicit decision, not a quick
   the household can reach; it stops being fine the moment this UI is made
   reachable from the public internet (a port-forward, a tunnel, anything
   that isn't LAN-only) without adding real auth first.
-- Canvas mode — deliberately cut this pass. Voice came back (Gemini TTS).
+- Canvas mode — deliberately cut this pass. Voice came back (local Piper TTS).
 - The old stub-only home-automation/Twilio tool ideas from an even earlier
   prototype were never resurrected and aren't planned.
