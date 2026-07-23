@@ -87,53 +87,79 @@
   .footer   { animation: reveal 0.8s 0.85s var(--ease) both; }
   @keyframes reveal { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-  /* ── The node mark — two liquid squares. Two rounded squares, each on
-        its own independent shift-and-rotate loop (different duration,
-        different rotation direction, so their relative angle and overlap
-        keep slowly recomposing rather than settling into a repeating
-        pattern) — deliberately overlapping through most of the cycle, not
-        avoiding each other. The SVG goo filter (#caden-goo, defined once
-        near the top of <body>) is what turns that overlap into one fused,
-        melted shape instead of two flat squares stacked on top of each
-        other: it blurs both, then a steep alpha-contrast pass turns the
-        blur back into a hard edge, so the blurred haze where they meet
-        reads as liquid meniscus, not a sharp intersection line. Pure
-        CSS/SVG, no JS. ── */
+  /* ── The node mark — two liquid squares. Two rounded squares, no
+        rotation at all — each one instead SNAPS between fixed stops
+        arranged in a circle around the mark's center (steps() timing, so
+        the position jumps instantly rather than gliding), while
+        independently wobbling its own outline smoothly in place. Position
+        and wobble are genuinely separate animations on the standalone
+        `translate`/`scale` transform properties (not the `transform`
+        shorthand) specifically so one can be stepped and the other eased
+        without either overriding the other's timing. Square A snaps
+        through 6 stops on a 9px-radius circle every 9s; square B snaps
+        through 5 stops on an 11px-radius circle every 11s — different
+        stop counts and radii mean the pair is very rarely at matching
+        angles, so which stops overlap keeps recomposing rather than
+        repeating in a short, obvious cycle. The SVG goo filter
+        (#caden-goo, defined once near the top of <body>) is what turns
+        the overlap into one fused, melted shape instead of two flat
+        squares stacked on top of each other: it blurs both, then a steep
+        alpha-contrast pass turns the blur back into a hard edge, so the
+        blurred haze where they meet reads as liquid meniscus, not a sharp
+        intersection line. Pure CSS/SVG, no JS. ── */
   .mark { position: relative; width: 50px; height: 50px; filter: url(#caden-goo); }
   .mark i.f {
     position: absolute; top: 50%; left: 50%; width: 23px; height: 23px; margin: -11.5px;
     background: var(--wht);
     border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%;
-    animation: ooze-in 0.7s var(--ease) both, shift-a 21s ease-in-out infinite;
+    animation: ooze-in 0.7s var(--ease) both, snap-a 9s steps(1) infinite, wobble-a 6s ease-in-out infinite;
   }
   .mark i.f:nth-of-type(2) {
-    animation-name: ooze-in, shift-b;
-    animation-duration: 0.7s, 27s;
-    animation-delay: 0.35s, 0s;
+    animation-name: ooze-in, snap-b, wobble-b;
+    animation-duration: 0.7s, 11s, 7s;
+    animation-delay: 0.35s, 0s, 0.5s;
   }
   @keyframes ooze-in { from { opacity: 0; transform: scale(0); border-radius: 50%; } to { opacity: 1; transform: scale(1); } }
 
-  /* Square A: rotates clockwise, orbits a wide loop around center — the
-     amplitude here (up to ~11px, against a 23px square) is deliberately
-     large enough that the two squares fully separate at some points in the
-     cycle and heavily overlap at others, so both "two distinct squares"
-     and "meshed together" are each true some of the time, not one blob
-     permanently masking the other's identity. */
-  @keyframes shift-a {
-    0%   { transform: translate(-7px, -6px)  rotate(0deg)   scale(1);    border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
-    25%  { transform: translate(9px, -10px)  rotate(90deg)  scale(1.05); border-radius: 40% 24% 36% 22% / 26% 38% 24% 40%; }
-    50%  { transform: translate(7px, 9px)    rotate(180deg) scale(0.95); border-radius: 22% 40% 26% 36% / 36% 22% 40% 26%; }
-    75%  { transform: translate(-10px, 7px)  rotate(270deg) scale(1.03); border-radius: 34% 28% 40% 24% / 24% 34% 28% 38%; }
-    100% { transform: translate(-7px, -6px)  rotate(360deg) scale(1);    border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
+  /* Six stops, 60° apart, on a 9px-radius circle. The hold-then-jump comes
+     from `steps(1)` on the animation itself (see above) — a timing
+     function applies *within* each keyframe-to-keyframe segment, not once
+     across the whole cycle, so steps(1) per segment is what gives one
+     clean jump per stop; steps(N) here would wrongly subdivide every
+     segment into N micro-steps, compounding into N×stopCount jumps
+     instead of the stopCount this is actually going for. */
+  @keyframes snap-a {
+    0%       { translate: 9px 0px; }
+    16.6667% { translate: 4.5px 7.8px; }
+    33.3333% { translate: -4.5px 7.8px; }
+    50%      { translate: -9px 0px; }
+    66.6667% { translate: -4.5px -7.8px; }
+    83.3333% { translate: 4.5px -7.8px; }
+    100%     { translate: 9px 0px; }
   }
-  /* Square B: rotates counter-clockwise at a different speed, orbits its
-     own wide loop — different duration + opposite direction is what keeps
-     the pair's relative angle and overlap continuously changing. */
-  @keyframes shift-b {
-    0%   { transform: translate(7px, 7px)   rotate(0deg)    scale(1);    border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
-    30%  { transform: translate(-10px, 9px) rotate(-130deg) scale(0.94); border-radius: 24% 40% 22% 38% / 40% 22% 36% 24%; }
-    60%  { transform: translate(-8px, -9px) rotate(-250deg) scale(1.08); border-radius: 38% 22% 40% 24% / 22% 40% 24% 36%; }
-    100% { transform: translate(7px, 7px)   rotate(-360deg) scale(1);    border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
+  /* Five stops, 72° apart, on an 11px-radius circle — a different stop
+     count from square A (not a shared divisor) is what keeps the two
+     squares' relative alignment from settling into a short repeating
+     pattern. */
+  @keyframes snap-b {
+    0%    { translate: 11px 0px; }
+    20%   { translate: 3.4px 10.5px; }
+    40%   { translate: -8.9px 6.5px; }
+    60%   { translate: -8.9px -6.5px; }
+    80%   { translate: 3.4px -10.5px; }
+    100%  { translate: 11px 0px; }
+  }
+  /* In-place liquid wobble only — scale + border-radius, no position, no
+     rotation — layered on top of the stepped snap above via the separate
+     `scale` transform property so this stays smoothly eased even while
+     position jumps instantly. */
+  @keyframes wobble-a {
+    0%, 100% { scale: 1;    border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
+    50%      { scale: 1.06; border-radius: 40% 24% 36% 22% / 26% 38% 24% 40%; }
+  }
+  @keyframes wobble-b {
+    0%, 100% { scale: 1;    border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
+    50%      { scale: 1.07; border-radius: 24% 40% 22% 38% / 40% 22% 36% 24%; }
   }
 
   /* ── Header ─────────────────────────────────────────────────────────── */
@@ -406,8 +432,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
-    .mark i.f { animation: none; opacity: 1; transform: translate(-3px, -2px) rotate(0deg); border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
-    .mark i.f:nth-of-type(2) { transform: translate(6px, 5px) rotate(35deg); border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
+    .mark i.f { animation: none; opacity: 1; translate: 9px 0px; scale: 1; border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
+    .mark i.f:nth-of-type(2) { translate: -8.9px 6.5px; border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
   }
 </style>
 </head>
