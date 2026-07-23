@@ -4,7 +4,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { AgentName, agentLabel, compactHistoryIfNeeded, runAgentTurnRetrying } from "./agent.js";
-import { providerStatus, synthesizeSpeech } from "./providers.js";
+import { providerStatus } from "./providers.js";
+import { synthesizeSpeech } from "./piper.js";
 import { auditEvents } from "./tools/shell.js";
 import { logHistory } from "./logbus.js";
 import { browserStatus, setModeOverride, closeBrowser } from "./tools/browser.js";
@@ -90,10 +91,10 @@ export function startServer() {
     res.json({ reminders: listReminders() });
   });
 
-  // Speaks Caden's reply via Gemini's TTS (see synthesizeSpeech in
-  // providers.ts) and hands back a real .wav file rather than base64-in-JSON
-  // — the browser just fetch()es it and decodeAudioData()s the response
-  // body directly.
+  // Speaks Caden's reply via Piper, a local TTS engine running entirely on
+  // this Pi (see synthesizeSpeech in piper.ts), and hands back a real .wav
+  // file rather than base64-in-JSON — the browser just fetch()es it and
+  // decodeAudioData()s the response body directly.
   app.post("/api/tts", async (req, res) => {
     const text = String(req.body?.text ?? "").trim();
     if (!text) return res.status(400).json({ error: "`text` must be a non-empty string" });
