@@ -87,90 +87,53 @@
   .footer   { animation: reveal 0.8s 0.85s var(--ease) both; }
   @keyframes reveal { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-  /* ── The node mark — a liquid circuit. Eight blobs that ooze in on load,
-        then drift on their own independent, non-linear paths forever after:
-        each one wanders toward a neighboring module's spot and back (or
-        onward to a third), morphing its own outline the whole time. The
-        SVG goo filter (#caden-goo, defined once near the top of <body>) is
-        what actually sells "liquid" — when two blobs' blurred edges get
-        close, the filter's contrast pass fuses them into one shape before
-        they separate again, rather than two solid circles just overlapping.
-        Pure CSS/SVG, no JS, no per-frame layout cost. ── */
-  .mark { position: relative; width: 56px; height: 56px; filter: url(#caden-goo); }
+  /* ── The node mark — two liquid squares. Two rounded squares, each on
+        its own independent shift-and-rotate loop (different duration,
+        different rotation direction, so their relative angle and overlap
+        keep slowly recomposing rather than settling into a repeating
+        pattern) — deliberately overlapping through most of the cycle, not
+        avoiding each other. The SVG goo filter (#caden-goo, defined once
+        near the top of <body>) is what turns that overlap into one fused,
+        melted shape instead of two flat squares stacked on top of each
+        other: it blurs both, then a steep alpha-contrast pass turns the
+        blur back into a hard edge, so the blurred haze where they meet
+        reads as liquid meniscus, not a sharp intersection line. Pure
+        CSS/SVG, no JS. ── */
+  .mark { position: relative; width: 50px; height: 50px; filter: url(#caden-goo); }
   .mark i.f {
-    position: absolute; top: 0; left: 0; width: 15px; height: 15px;
+    position: absolute; top: 50%; left: 50%; width: 23px; height: 23px; margin: -11.5px;
     background: var(--wht);
-    border-radius: 44% 56% 52% 48% / 48% 44% 56% 52%;
-    animation: ooze-in 0.7s var(--ease) both, node-idle 6s ease-in-out infinite;
+    border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%;
+    animation: ooze-in 0.7s var(--ease) both, shift-a 21s ease-in-out infinite;
   }
-  /* Base grid spot (checker layout, corner-to-corner like a circuit trace)
-     plus its own drift keyframes and duration — every blob's loop length is
-     mutually prime-ish with its neighbors' so the cluster never visibly
-     repeats as a whole, only each part quietly recurring on its own clock. */
-  .mark i.f:nth-of-type(1) { top: 0px;  left: 0px;  animation-name: ooze-in, drift-1; animation-duration: 0.7s, 10.5s; animation-delay: 0.00s, 0.7s; }
-  .mark i.f:nth-of-type(2) { top: 0px;  left: 28px; animation-name: ooze-in, drift-2; animation-duration: 0.7s, 12.5s; animation-delay: 0.35s, 1.05s; }
-  .mark i.f:nth-of-type(3) { top: 14px; left: 14px; animation-name: ooze-in, drift-3; animation-duration: 0.7s, 9s;   animation-delay: 0.10s, 0.8s; }
-  .mark i.f:nth-of-type(4) { top: 14px; left: 42px; animation-name: ooze-in, drift-4; animation-duration: 0.7s, 13.5s; animation-delay: 0.50s, 1.2s; }
-  .mark i.f:nth-of-type(5) { top: 28px; left: 0px;  animation-name: ooze-in, drift-5; animation-duration: 0.7s, 11.5s; animation-delay: 0.28s, 0.98s; }
-  .mark i.f:nth-of-type(6) { top: 28px; left: 28px; animation-name: ooze-in, drift-6; animation-duration: 0.7s, 8.5s;  animation-delay: 0.16s, 0.86s; }
-  .mark i.f:nth-of-type(7) { top: 42px; left: 14px; animation-name: ooze-in, drift-7; animation-duration: 0.7s, 14s;   animation-delay: 0.44s, 1.14s; }
-  .mark i.f:nth-of-type(8) { top: 42px; left: 42px; animation-name: ooze-in, drift-8; animation-duration: 0.7s, 10s;   animation-delay: 0.22s, 0.92s; }
-
+  .mark i.f:nth-of-type(2) {
+    animation-name: ooze-in, shift-b;
+    animation-duration: 0.7s, 27s;
+    animation-delay: 0.35s, 0s;
+  }
   @keyframes ooze-in { from { opacity: 0; transform: scale(0); border-radius: 50%; } to { opacity: 1; transform: scale(1); } }
-  @keyframes node-idle { 0%, 100% { opacity: 1; } 6% { opacity: 0.45; } 12% { opacity: 1; } }
 
-  /* Each drift-N wanders toward an adjacent module's base spot (the "swap")
-     and on to a second neighbor before looping home, wobbling its own
-     border-radius the entire time for the liquify feel — never a plain
-     circle, never symmetric. Distances are sized so two blobs' blurred
-     edges actually touch mid-path under the goo filter. */
-  @keyframes drift-1 {
-    0%   { transform: translate(0, 0)     scale(1);    border-radius: 44% 56% 52% 48% / 48% 44% 56% 52%; }
-    30%  { transform: translate(12px, 11px) scale(1.15); border-radius: 60% 40% 45% 55% / 55% 60% 40% 45%; }
-    62%  { transform: translate(3px, 22px)  scale(0.92); border-radius: 38% 62% 58% 42% / 45% 38% 62% 55%; }
-    100% { transform: translate(0, 0)     scale(1);    border-radius: 44% 56% 52% 48% / 48% 44% 56% 52%; }
+  /* Square A: rotates clockwise, orbits a wide loop around center — the
+     amplitude here (up to ~11px, against a 23px square) is deliberately
+     large enough that the two squares fully separate at some points in the
+     cycle and heavily overlap at others, so both "two distinct squares"
+     and "meshed together" are each true some of the time, not one blob
+     permanently masking the other's identity. */
+  @keyframes shift-a {
+    0%   { transform: translate(-7px, -6px)  rotate(0deg)   scale(1);    border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
+    25%  { transform: translate(9px, -10px)  rotate(90deg)  scale(1.05); border-radius: 40% 24% 36% 22% / 26% 38% 24% 40%; }
+    50%  { transform: translate(7px, 9px)    rotate(180deg) scale(0.95); border-radius: 22% 40% 26% 36% / 36% 22% 40% 26%; }
+    75%  { transform: translate(-10px, 7px)  rotate(270deg) scale(1.03); border-radius: 34% 28% 40% 24% / 24% 34% 28% 38%; }
+    100% { transform: translate(-7px, -6px)  rotate(360deg) scale(1);    border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
   }
-  @keyframes drift-2 {
-    0%   { transform: translate(0, 0)      scale(1);    border-radius: 48% 52% 44% 56% / 44% 56% 52% 48%; }
-    35%  { transform: translate(-13px, 12px) scale(1.1);  border-radius: 55% 45% 60% 40% / 50% 55% 45% 60%; }
-    68%  { transform: translate(-2px, -10px) scale(0.9);  border-radius: 42% 58% 46% 54% / 60% 42% 58% 46%; }
-    100% { transform: translate(0, 0)      scale(1);    border-radius: 48% 52% 44% 56% / 44% 56% 52% 48%; }
-  }
-  @keyframes drift-3 {
-    0%   { transform: translate(0, 0)       scale(1);    border-radius: 52% 48% 56% 44% / 46% 52% 48% 54%; }
-    28%  { transform: translate(-12px, -11px) scale(1.18); border-radius: 40% 60% 42% 58% / 58% 40% 60% 42%; }
-    58%  { transform: translate(13px, 3px)     scale(0.94); border-radius: 62% 38% 55% 45% / 42% 62% 38% 58%; }
-    100% { transform: translate(0, 0)       scale(1);    border-radius: 52% 48% 56% 44% / 46% 52% 48% 54%; }
-  }
-  @keyframes drift-4 {
-    0%   { transform: translate(0, 0)      scale(1);    border-radius: 46% 54% 50% 50% / 52% 46% 54% 48%; }
-    33%  { transform: translate(13px, -12px) scale(1.12); border-radius: 58% 42% 62% 38% / 44% 58% 42% 56%; }
-    64%  { transform: translate(-3px, 9px)   scale(0.9);  border-radius: 40% 60% 38% 62% / 56% 40% 60% 44%; }
-    100% { transform: translate(0, 0)      scale(1);    border-radius: 46% 54% 50% 50% / 52% 46% 54% 48%; }
-  }
-  @keyframes drift-5 {
-    0%   { transform: translate(0, 0)      scale(1);    border-radius: 50% 50% 46% 54% / 54% 46% 50% 50%; }
-    38%  { transform: translate(11px, -12px) scale(1.16); border-radius: 62% 38% 58% 42% / 40% 62% 38% 58%; }
-    70%  { transform: translate(-4px, 2px)   scale(0.93); border-radius: 44% 56% 40% 60% / 58% 44% 56% 42%; }
-    100% { transform: translate(0, 0)      scale(1);    border-radius: 50% 50% 46% 54% / 54% 46% 50% 50%; }
-  }
-  @keyframes drift-6 {
-    0%   { transform: translate(0, 0)       scale(1);    border-radius: 54% 46% 48% 52% / 48% 54% 46% 52%; }
-    26%  { transform: translate(-11px, -13px) scale(1.14); border-radius: 42% 58% 62% 38% / 56% 42% 58% 40%; }
-    60%  { transform: translate(12px, -3px)   scale(0.91); border-radius: 60% 40% 44% 56% / 38% 60% 40% 62%; }
-    100% { transform: translate(0, 0)       scale(1);    border-radius: 54% 46% 48% 52% / 48% 54% 46% 52%; }
-  }
-  @keyframes drift-7 {
-    0%   { transform: translate(0, 0)      scale(1);    border-radius: 48% 52% 54% 46% / 50% 48% 52% 46%; }
-    32%  { transform: translate(-13px, 11px) scale(1.13); border-radius: 60% 40% 38% 62% / 44% 60% 40% 58%; }
-    66%  { transform: translate(2px, -9px)   scale(0.92); border-radius: 38% 62% 60% 40% / 62% 38% 62% 40%; }
-    100% { transform: translate(0, 0)      scale(1);    border-radius: 48% 52% 54% 46% / 50% 48% 52% 46%; }
-  }
-  @keyframes drift-8 {
-    0%   { transform: translate(0, 0)      scale(1);    border-radius: 46% 54% 44% 56% / 56% 46% 54% 44%; }
-    29%  { transform: translate(12px, -11px) scale(1.17); border-radius: 58% 42% 60% 40% / 42% 58% 42% 60%; }
-    61%  { transform: translate(-10px, 4px)  scale(0.9);  border-radius: 40% 60% 42% 58% / 60% 40% 58% 42%; }
-    100% { transform: translate(0, 0)      scale(1);    border-radius: 46% 54% 44% 56% / 56% 46% 54% 44%; }
+  /* Square B: rotates counter-clockwise at a different speed, orbits its
+     own wide loop — different duration + opposite direction is what keeps
+     the pair's relative angle and overlap continuously changing. */
+  @keyframes shift-b {
+    0%   { transform: translate(7px, 7px)   rotate(0deg)    scale(1);    border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
+    30%  { transform: translate(-10px, 9px) rotate(-130deg) scale(0.94); border-radius: 24% 40% 22% 38% / 40% 22% 36% 24%; }
+    60%  { transform: translate(-8px, -9px) rotate(-250deg) scale(1.08); border-radius: 38% 22% 40% 24% / 22% 40% 24% 36%; }
+    100% { transform: translate(7px, 7px)   rotate(-360deg) scale(1);    border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
   }
 
   /* ── Header ─────────────────────────────────────────────────────────── */
@@ -443,7 +406,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
-    .mark i.f { animation: none; opacity: 1; transform: none; border-radius: 44% 56% 52% 48% / 48% 44% 56% 52%; }
+    .mark i.f { animation: none; opacity: 1; transform: translate(-3px, -2px) rotate(0deg); border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
+    .mark i.f:nth-of-type(2) { transform: translate(6px, 5px) rotate(35deg); border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
   }
 </style>
 </head>
@@ -471,8 +435,7 @@
   <header class="header">
     <div class="brand">
       <div class="mark" aria-hidden="true">
-        <i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i>
-        <i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i>
+        <i class="f"></i><i class="f"></i>
       </div>
       <div class="logo">Caden</div>
       <div class="subtitle up">Domestic Agent System</div>

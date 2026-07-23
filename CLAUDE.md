@@ -480,7 +480,13 @@ each fix commit gets its own.
 `src/sfx.ts` + `/ws/sfx` in `server.ts` give Caden six status sounds,
 synthesized (not downloaded) into `public/sfx/*.wav` via
 `scripts/gen-sfx.mjs` (see that script's comments, since there's no
-license/CDN dependency this way):
+license/CDN dependency this way). The sound language is deliberately the
+modern-AI-assistant register — soft, phase-accumulated pitch glides and
+layered shimmer tones passed through a one-pole lowpass, closer to
+Siri/Meta-AI-style product chimes — rather than the discrete chiptune-style
+square-wave notes this replaced; `glideTone()`/`lowpass()` in the script are
+the primitives behind that (`thinking` is the one exception, kept
+filter-free — see "Looping SFX" below for why):
 - `sent` — the server received a message.
 - `thinking` — the one looping sound: starts the moment a turn begins
   actually using tools (not on every reply), and keeps softly looping until
@@ -541,13 +547,18 @@ parsing are both correct; the actual startup-overhead measurement can only
 be validated on the real Pi where `aplay` exists.
 
 **Looping SFX (`thinking`).** `thinking.wav` isn't a blip — it's a 1-second
-seamless loop unit (`loopableTone()` in `gen-sfx.mjs`): a soft carrier tone
-with a gentle amplitude pulse, both constrained to complete a *whole number*
-of cycles within the buffer (330 and 3 respectively), so `sample[0]` picks
-up exactly where the end of the buffer left off — verified directly against
-the generated WAV (the sample-to-sample delta across the wrap point matches
-the delta just inside the loop exactly). No fade envelope either, since a
-fade-to-silence would itself create an audible dip every repetition.
+seamless loop unit (`loopableTone()` in `gen-sfx.mjs`): a soft carrier tone,
+a gentle amplitude pulse, and a very quiet fifth-above shimmer layer for
+warmth, all three constrained to complete a *whole number* of cycles within
+the buffer (330, 3, and 495 respectively), so `sample[0]` picks up exactly
+where the end of the buffer left off — verified directly against the
+generated WAV (the sample-to-sample delta across the wrap point matches the
+delta just inside the loop exactly, bit-for-bit). No fade envelope either,
+since a fade-to-silence would itself create an audible dip every
+repetition — and deliberately not run through `gen-sfx.mjs`'s `lowpass()`
+pass like the other five sounds, since a causal filter's cold-start
+transient would reintroduce exactly the seam discontinuity the whole-cycle
+math exists to avoid.
 
 The browser just sets `AudioBufferSourceNode.loop = true` — Web Audio
 replays a looping buffer back-to-back with no gap by construction. The Pi
