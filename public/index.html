@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CADEN</title>
+<title>caden</title>
 <!-- Overridden at runtime (see the Options tab's Remote Access section) when
      this exact file is loaded from somewhere other than the Pi itself (e.g.
      GitHub Pages) — every /api/... and /ws/... reference in this page is a
@@ -13,454 +13,534 @@
      directly by the Pi, so local use is completely unaffected. -->
 <base id="apiBase" href="/">
 <style>
+  /* ── caden · a small intelligence, living at home ─────────────────────
+     Deep water at night, with something alive glowing in it.
+     Gradients live ONLY in the background layer (the drifting blobs);
+     everything drawn on top — text, buttons, cards, the orb — is a solid
+     color. Big rounded lowercase display type carries the personality. */
   :root {
-    --bg:        #0b0906;
-    --panel:     #14110c;
-    --panel-2:   #1b1710;
-    --amber:     #f4a71d;
-    --amber-2:   #d4901a;
-    --cream:     #d8cfbe;
-    --dim:       #8a8172;
-    --faint:     #5a5346;
-    --green:     #56d364;
-    --red:       #e5534b;
-    --border:    #2e2a20;
-    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    --t1: 0.12s;
+    --abyss:   #05070b;   /* page base under the gradient blobs */
+    --ink:     #e9ecef;   /* primary text, bone-white           */
+    --mut:     #8b93a0;   /* secondary text                     */
+    --dim:     #565d6b;   /* tertiary / hush                    */
+    --mint:    #8ee6c2;   /* the one accent — bioluminescence   */
+    --mint-dk: #0d332a;   /* solid mint-tinted fill (btn hover) */
+    --coral:   #ff7a70;   /* error / link lost                  */
+    --card:    rgba(233, 236, 239, 0.035);
+    --card-2:  rgba(233, 236, 239, 0.06);
+    --line:    rgba(233, 236, 239, 0.10);
+    --disp: ui-rounded, "SF Pro Rounded", "Varela Round", "Comfortaa", "Nunito",
+            "Arial Rounded MT Bold", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
+    --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, Menlo, monospace;
+    --r: 22px;            /* the house radius — everything is soft */
+    --spring: cubic-bezier(0.22, 1.4, 0.36, 1);
+    --t1: 0.18s;
   }
 
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    font-family: var(--mono);
-    color: var(--cream);
-    background: var(--bg);
-    font-size: 13px;
-    line-height: 1.5;
+    font-family: var(--body);
+    color: var(--ink);
+    background: var(--abyss);
+    font-size: 14px;
+    line-height: 1.55;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
-    letter-spacing: 0.02em;
   }
 
-  /* Scanlines + vignette — the CRT/appliance texture */
-  .scan {
-    position: fixed; inset: 0; pointer-events: none; z-index: 90;
-    background:
-      repeating-linear-gradient(180deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px),
-      radial-gradient(ellipse 100% 100% at 50% 40%, transparent 60%, rgba(0,0,0,0.5) 100%);
+  /* ── The only gradients on the page: three blurred blobs drifting on
+        coprime durations (37/53/71s) so the background never repeats a
+        composition — the water Caden lives in. ─────────────────────── */
+  .bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .bg i { position: absolute; border-radius: 50%; filter: blur(80px); will-change: transform; }
+  .bg i:nth-child(1) {
+    width: 62vmax; height: 62vmax; left: -18vmax; top: -22vmax;
+    background: radial-gradient(circle at 40% 40%, #0d2b33 0%, transparent 65%);
+    animation: drift-a 53s ease-in-out infinite alternate;
   }
+  .bg i:nth-child(2) {
+    width: 55vmax; height: 55vmax; right: -20vmax; bottom: -18vmax;
+    background: radial-gradient(circle at 55% 55%, #241a3d 0%, transparent 65%);
+    animation: drift-b 71s ease-in-out infinite alternate;
+  }
+  .bg i:nth-child(3) {
+    width: 34vmax; height: 34vmax; left: 30vw; bottom: -14vmax;
+    background: radial-gradient(circle at 50% 50%, #0c2a24 0%, transparent 62%);
+    animation: drift-c 37s ease-in-out infinite alternate;
+  }
+  @keyframes drift-a { to { transform: translate(9vmax, 6vmax) scale(1.15); } }
+  @keyframes drift-b { to { transform: translate(-8vmax, -9vmax) scale(0.9); } }
+  @keyframes drift-c { to { transform: translate(-12vmax, -4vmax) scale(1.2); } }
 
-  ::selection { background: rgba(244, 167, 29, 0.3); color: #fff; }
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border: 2px solid var(--bg); }
+  ::selection { background: rgba(142, 230, 194, 0.28); color: #fff; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: var(--card-2); border-radius: 99px; }
   ::-webkit-scrollbar-track { background: transparent; }
 
-  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; letter-spacing: inherit; }
-  button:focus-visible, select:focus-visible, textarea:focus-visible {
-    outline: 1px solid var(--amber); outline-offset: 1px;
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+  button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
+    outline: 2px solid var(--mint); outline-offset: 2px; border-radius: 6px;
   }
-  .up { text-transform: uppercase; }
+  /* the whole interface speaks lowercase — part of the rounded, liquid voice */
+  .up { text-transform: lowercase; }
 
   /* ── Frame ──────────────────────────────────────────────────────────── */
   .app {
-    position: fixed; inset: 0;
+    position: fixed; inset: 0; z-index: 1;
     display: flex; flex-direction: column;
-    padding: 22px 26px 14px;
-    max-width: 1720px; margin: 0 auto;
+    padding: 26px 30px 16px;
+    max-width: 1560px; margin: 0 auto;
   }
 
-  /* ── Header ─────────────────────────────────────────────────────────── */
-  .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
-  .brand { display: flex; align-items: center; gap: 16px; }
+  /* staggered, asymmetric page entrance — nothing arrives in lockstep */
+  .header      { animation: rise 0.9s var(--spring) both; }
+  .sysline     { animation: rise 0.9s 0.14s var(--spring) both; }
+  .tabs        { animation: rise 0.9s 0.05s var(--spring) both; }
+  .col-left    { animation: rise 1.1s 0.22s var(--spring) both; }
+  .col-main    { animation: rise 1.0s 0.10s var(--spring) both; }
+  .footer      { animation: fadein 1.6s 0.5s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(0.985); } to { opacity: 1; transform: none; } }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ── Header: the wordmark and the orb ───────────────────────────────── */
+  .header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 14px; }
+  .brand { display: flex; align-items: center; gap: 18px; min-width: 0; }
   .logo {
-    font-size: 38px; font-weight: 800; letter-spacing: 0.04em; line-height: 0.9;
-    color: var(--amber);
+    font-family: var(--disp); font-weight: 800; font-size: 46px;
+    letter-spacing: -0.045em; line-height: 1; color: var(--ink);
+    text-transform: lowercase;
   }
-  .bars { display: flex; flex-direction: column; gap: 3px; width: 34px; }
-  .bars i { height: 4px; background: var(--amber); display: block; }
-  .bars i:nth-child(1) { width: 100%; }
-  .bars i:nth-child(2) { width: 70%; }
-  .bars i:nth-child(3) { width: 100%; background: var(--red); }
-  .subtitle { font-size: 12px; letter-spacing: 0.34em; color: var(--dim); align-self: center; }
+  .subtitle {
+    font-family: var(--disp); font-weight: 700; font-size: 14px;
+    letter-spacing: -0.01em; color: var(--mut); align-self: flex-end; padding-bottom: 6px;
+  }
 
+  /* status capsule (right side of header) */
   .idbox {
-    border: 1px solid var(--border); background: var(--panel);
-    padding: 8px 14px; min-width: 210px;
-    font-size: 11px; letter-spacing: 0.12em;
+    display: flex; align-items: center; gap: 14px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 10px 20px 10px 12px;
+    font-family: var(--disp); font-weight: 700; font-size: 13px;
   }
-  .idbox .row { display: flex; justify-content: space-between; gap: 20px; padding: 2px 0; }
-  .idbox .k { color: var(--dim); }
-  .idbox .v { color: var(--amber); }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); vertical-align: 0; margin-right: 6px; }
-  .dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .dot.down { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .idbox .row { display: flex; align-items: center; gap: 7px; }
+  .idbox .k { color: var(--dim); text-transform: lowercase; }
+  .idbox .v { color: var(--ink); text-transform: lowercase; display: flex; align-items: center; gap: 8px; }
+
+  /* ── The presence orb — Caden itself. A solid mint blob whose outline
+        morphs on two coprime cycles (11s + 7s) so its breathing never
+        loops visibly. It goes still and coral when the link drops.
+        #linkDot carries class "dot ok" / "dot down" from pollStatus(). ── */
+  .dot {
+    display: inline-block; width: 26px; height: 26px;
+    background: var(--dim);
+    border-radius: 46% 54% 57% 43% / 52% 46% 54% 48%;
+    transition: background var(--t1);
+    animation: morph 11s ease-in-out infinite, breathe 7s ease-in-out infinite;
+  }
+  .dot.ok   { background: var(--mint); box-shadow: 0 0 22px rgba(142, 230, 194, 0.45); }
+  .dot.down { background: var(--coral); box-shadow: 0 0 18px rgba(255, 122, 112, 0.4); animation: none; border-radius: 50%; }
+  @keyframes morph {
+    0%,100% { border-radius: 46% 54% 57% 43% / 52% 46% 54% 48%; }
+    25%     { border-radius: 58% 42% 44% 56% / 44% 58% 42% 56%; }
+    50%     { border-radius: 43% 57% 52% 48% / 57% 43% 51% 49%; }
+    75%     { border-radius: 55% 45% 58% 42% / 46% 54% 44% 56%; }
+  }
+  @keyframes breathe { 0%,100% { transform: scale(1); } 55% { transform: scale(1.14); } }
 
   /* ── SYS status line ────────────────────────────────────────────────── */
-  .sysline {
-    display: flex; align-items: center; gap: 14px;
-    border: 1px solid var(--border); background: var(--panel);
-    padding: 9px 12px; margin-bottom: 14px;
+  .sysline { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-left: 4px; }
+  .sys-tag {
+    font-family: var(--disp); font-weight: 800; font-size: 12px;
+    color: var(--abyss); background: var(--mint);
+    padding: 3px 12px; border-radius: 999px; text-transform: lowercase;
   }
-  .sys-tag { background: var(--amber); color: #000; font-weight: 700; padding: 2px 9px; letter-spacing: 0.14em; font-size: 11px; }
-  .sys-text { color: var(--amber-2); letter-spacing: 0.14em; font-size: 12px; }
+  .sys-text { font-family: var(--mono); color: var(--mut); font-size: 12px; letter-spacing: 0.06em; text-transform: lowercase; }
 
-  /* ── Tabs ───────────────────────────────────────────────────────────── */
+  /* ── Tabs — soft pills ──────────────────────────────────────────────── */
   .tabs { display: flex; gap: 10px; margin-bottom: 16px; }
   .tab {
     display: flex; align-items: center; gap: 9px;
-    border: 1px solid var(--border); background: var(--panel);
-    padding: 10px 20px; letter-spacing: 0.14em; font-size: 12px; color: var(--dim);
-    transition: color var(--t1), border-color var(--t1);
+    font-family: var(--disp); font-weight: 800; font-size: 15px; letter-spacing: -0.02em;
+    text-transform: lowercase;
+    background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+    padding: 10px 24px; color: var(--mut);
+    transition: color var(--t1), background var(--t1), transform 0.35s var(--spring);
   }
-  .tab .sq { width: 8px; height: 8px; background: var(--faint); }
-  .tab:hover { color: var(--cream); }
-  .tab.on { color: var(--amber); border-color: var(--amber); }
-  .tab.on .sq { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .tab .sq { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); transition: background var(--t1); }
+  .tab:hover { color: var(--ink); transform: translateY(-2px); }
+  .tab.on { color: var(--abyss); background: var(--mint); border-color: var(--mint); }
+  .tab.on .sq { background: var(--abyss); }
 
   /* ── Body columns ───────────────────────────────────────────────────── */
-  .main { flex: 1; display: flex; gap: 16px; min-height: 0; }
-  .col-left { width: 300px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .main { flex: 1; display: flex; gap: 18px; min-height: 0; }
+  .col-left { width: 292px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 18px; }
   .col-main { flex: 1; min-width: 0; display: flex; }
 
   @media (max-width: 900px) {
     .col-left { display: none; }
+    .app { padding: 18px 14px 10px; }
+    .logo { font-size: 36px; }
+    .subtitle { display: none; }
   }
 
-  /* ── Panels ─────────────────────────────────────────────────────────── */
-  .panel { border: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  /* ── Cards ──────────────────────────────────────────────────────────── */
+  .panel {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
   .panel-head {
-    background: var(--amber); color: #000;
-    font-weight: 700; letter-spacing: 0.12em; font-size: 12px;
-    padding: 6px 12px; display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--disp); font-weight: 800; font-size: 15px; letter-spacing: -0.02em;
+    text-transform: lowercase; color: var(--ink);
+    padding: 14px 20px 10px; display: flex; align-items: center; justify-content: space-between;
     flex: 0 0 auto;
   }
-  .panel-head .meta { font-weight: 400; letter-spacing: 0.1em; opacity: 0.72; font-size: 11px; }
-  .panel-body { padding: 14px; flex: 1; min-height: 0; }
+  .panel-head .meta { font-weight: 700; font-size: 12px; color: var(--dim); }
+  .panel-body { padding: 4px 20px 16px; flex: 1; min-height: 0; }
 
-  /* Segmented storage-style bar */
-  .seg { display: flex; gap: 3px; margin: 8px 0 6px; }
-  .seg i { flex: 1; height: 12px; background: var(--panel-2); border: 1px solid var(--border); }
-  .seg i.fill { background: var(--amber); border-color: var(--amber); }
-  .kv { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; letter-spacing: 0.08em; }
-  .kv .k { color: var(--dim); }
-  .kv .v { color: var(--amber); }
-  .subline { font-size: 11px; color: var(--dim); letter-spacing: 0.1em; margin-top: 2px; }
+  /* key-pool meter */
+  .seg { display: flex; gap: 4px; margin: 8px 0 10px; }
+  .seg i { flex: 1; height: 8px; border-radius: 99px; background: var(--card-2); }
+  .seg i.fill { background: var(--mint); }
+  .kv { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12.5px; }
+  .kv .k { color: var(--dim); font-family: var(--disp); font-weight: 700; text-transform: lowercase; }
+  .kv .v { color: var(--ink); font-family: var(--mono); font-size: 12px; text-transform: lowercase; }
+  .subline { font-family: var(--disp); font-weight: 700; font-size: 12px; color: var(--dim); text-transform: lowercase; margin-top: 2px; }
 
-  .session-row { display: flex; gap: 8px; }
+  .session-row { display: flex; gap: 8px; padding-top: 8px; }
   select.sel {
     flex: 1; appearance: none; -webkit-appearance: none;
-    font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--amber); background: var(--panel-2);
-    border: 1px solid var(--border); padding: 8px 26px 8px 10px; cursor: pointer;
-    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%23f4a71d' stroke-width='1.4'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 9px center;
+    font-family: var(--disp); font-weight: 700; font-size: 13px; text-transform: lowercase;
+    color: var(--ink); background-color: var(--card-2);
+    border: 1px solid var(--line); border-radius: 999px; padding: 8px 30px 8px 16px; cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%238ee6c2' stroke-width='1.4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 13px center;
   }
-  select.sel option { background: var(--panel); color: var(--cream); }
+  select.sel option { background: #10141c; color: var(--ink); }
 
   .btn {
-    font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--cream); background: var(--panel-2);
-    border: 1px solid var(--border); padding: 8px 14px;
-    transition: border-color var(--t1), color var(--t1);
+    font-family: var(--disp); font-weight: 700; font-size: 13px; text-transform: lowercase;
+    color: var(--ink); background: var(--card-2);
+    border: 1px solid var(--line); border-radius: 999px; padding: 8px 18px;
+    transition: background var(--t1), color var(--t1), transform 0.35s var(--spring);
   }
-  .btn:hover { border-color: var(--dim); }
-  .btn-amber { background: var(--amber); color: #000; border-color: var(--amber); font-weight: 700; }
-  .btn-amber:hover { background: var(--amber-2); border-color: var(--amber-2); }
-  .btn-cancel { border-color: #c0392b; color: #e0685c; }
-  .btn-cancel:hover { background: #c0392b; color: #000; border-color: #c0392b; }
-  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn:hover { background: var(--mint-dk); transform: translateY(-1px); }
+  .btn-amber { background: var(--mint); color: var(--abyss); border-color: var(--mint); font-weight: 800; }
+  .btn-amber:hover { background: #a5efd0; }
+  .btn-cancel { border-color: rgba(255, 122, 112, 0.5); color: var(--coral); }
+  .btn-cancel:hover { background: var(--coral); color: var(--abyss); }
+  .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
 
-  /* Corner-cut model box */
+  /* the little plaque under telemetry */
   .modelbox {
-    position: relative; border: 1px solid var(--border); background: var(--panel);
-    padding: 14px; font-size: 11px; letter-spacing: 0.12em; color: var(--dim); line-height: 1.9;
-    clip-path: polygon(18px 0, 100% 0, 100% 100%, 0 100%, 0 18px);
-  }
-  .modelbox::before {
-    content: ""; position: absolute; top: 0; left: 0; width: 18px; height: 18px;
-    border-top: 1px solid var(--border);
-    transform: translateX(0) rotate(0);
-    background: linear-gradient(225deg, transparent 49%, var(--border) 50%, transparent 52%);
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 16px 20px; font-family: var(--disp); font-weight: 700;
+    font-size: 12.5px; color: var(--dim); line-height: 1.9; text-transform: lowercase;
   }
 
-  /* ── Views (chat / system / browser) ────────────────────────────────── */
+  /* ── Views (chat / system / options) ────────────────────────────────── */
   .view { flex: 1; min-width: 0; }
   .view.hidden { display: none; }
 
-  .conv-scroll { flex: 1; overflow-y: auto; padding: 18px 16px; min-height: 0; }
-  .conv-inner { max-width: 860px; }
+  .conv-scroll { flex: 1; overflow-y: auto; padding: 14px 22px; min-height: 0; }
+  .conv-inner { max-width: 840px; }
 
-  .conv-empty { color: var(--faint); font-size: 12px; letter-spacing: 0.14em; padding: 8vh 0 0; text-align: center; }
-  .conv-empty .big { display: block; color: var(--amber); font-size: 20px; letter-spacing: 0.3em; margin-bottom: 12px; }
+  .conv-empty { color: var(--dim); font-family: var(--disp); font-weight: 700; font-size: 14px; padding: 9vh 0 0; text-align: center; }
+  .conv-empty .big {
+    display: block; color: var(--ink); font-family: var(--disp); font-weight: 800;
+    font-size: 40px; letter-spacing: -0.04em; margin-bottom: 10px; text-transform: lowercase;
+  }
 
-  .turn { margin-bottom: 20px; }
-  .turn-label { font-size: 10.5px; letter-spacing: 0.2em; margin-bottom: 5px; }
+  /* messages bloom in on a springy overshoot — each one a small event */
+  .turn { margin-bottom: 22px; animation: bloom 0.7s var(--spring) both; }
+  @keyframes bloom { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: none; } }
+  .turn-label { font-family: var(--disp); font-weight: 800; font-size: 12px; letter-spacing: -0.01em; text-transform: lowercase; margin-bottom: 6px; }
   .turn-user .turn-label { color: var(--dim); }
-  .turn-caden .turn-label { color: var(--amber); }
-  .turn-caden.error .turn-label { color: var(--red); }
-  .turn-body { white-space: pre-wrap; overflow-wrap: break-word; }
-  .turn-user .turn-body { color: var(--cream); }
-  .turn-caden .turn-body { color: var(--cream); }
-  .turn-body a { color: var(--amber); }
-  .turn-meta { margin-top: 8px; font-size: 10.5px; letter-spacing: 0.08em; color: var(--faint); }
+  .turn-caden .turn-label { color: var(--mint); }
+  .turn-caden.error .turn-label { color: var(--coral); }
+  .turn-body { white-space: pre-wrap; overflow-wrap: break-word; font-size: 14.5px; }
+  .turn-user .turn-body {
+    color: var(--ink); background: var(--card-2); border: 1px solid var(--line);
+    border-radius: var(--r); border-top-left-radius: 6px; padding: 12px 18px; display: inline-block; max-width: 100%;
+  }
+  .turn-caden .turn-body { color: var(--ink); }
+  .turn-body a { color: var(--mint); }
+  .turn-meta { margin-top: 8px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--dim); text-transform: lowercase; }
   .turn-images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .turn-images img { max-width: 220px; max-height: 220px; border: 1px solid var(--border); }
+  .turn-images img { max-width: 220px; max-height: 220px; border-radius: 14px; border: 1px solid var(--line); }
 
-  .caret { display: inline-block; width: 8px; height: 15px; margin-left: 2px; background: var(--amber); vertical-align: -3px; animation: blink 1s step-end infinite; }
+  .caret { display: inline-block; width: 9px; height: 16px; margin-left: 2px; background: var(--mint); border-radius: 3px; vertical-align: -3px; animation: blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
-  .dots { display: inline-flex; gap: 5px; padding: 3px 0; }
-  .dots i { width: 6px; height: 6px; background: var(--amber); animation: dp 1.1s ease-in-out infinite; }
+  .dots { display: inline-flex; gap: 6px; padding: 4px 0; }
+  .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); animation: dp 1.1s ease-in-out infinite; }
   .dots i:nth-child(2){animation-delay:.15s} .dots i:nth-child(3){animation-delay:.3s}
-  @keyframes dp { 0%,60%,100%{opacity:.2} 30%{opacity:1} }
+  @keyframes dp { 0%,60%,100%{opacity:.2; transform: scale(0.8)} 30%{opacity:1; transform: scale(1)} }
 
-  /* Trace / thinking */
-  .trace { margin-bottom: 8px; }
+  /* trace / thinking capsule */
+  .trace { margin-bottom: 10px; }
   .trace summary {
-    list-style: none; cursor: pointer; font-size: 10.5px; letter-spacing: 0.16em;
-    color: var(--faint); padding: 2px 0;
+    list-style: none; cursor: pointer; font-family: var(--disp); font-weight: 700;
+    font-size: 11.5px; text-transform: lowercase; color: var(--dim); padding: 2px 0;
   }
   .trace summary::-webkit-details-marker { display: none; }
-  .trace summary::before { content: "[+] "; color: var(--amber-2); }
-  .trace[open] summary::before { content: "[-] "; }
-  .trace.live summary { color: var(--amber-2); }
-  .trace-body { margin-top: 5px; padding-left: 12px; border-left: 1px solid var(--border); font-size: 11px; color: var(--dim); }
+  .trace summary::before { content: "◦ "; color: var(--mint); }
+  .trace[open] summary::before { content: "● "; }
+  .trace.live summary { color: var(--mint); }
+  .trace-body { margin-top: 6px; padding: 8px 14px; background: var(--card); border-radius: 14px; font-family: var(--mono); font-size: 11px; color: var(--mut); }
   .trace-line { white-space: pre-wrap; padding: 1px 0; }
-  .trace-line b { color: var(--amber); }
-  .trace-line span { color: var(--faint); }
+  .trace-line b { color: var(--mint); font-weight: 600; }
+  .trace-line span { color: var(--dim); }
 
-  /* Attachment preview strip */
-  .attach-row { display: none; flex-wrap: wrap; gap: 8px; padding: 10px 14px 0; flex: 0 0 auto; }
-  .attach-thumb { position: relative; width: 56px; height: 56px; border: 1px solid var(--border); }
+  /* attachment preview strip */
+  .attach-row { display: none; flex-wrap: wrap; gap: 8px; padding: 10px 20px 0; flex: 0 0 auto; }
+  .attach-thumb { position: relative; width: 56px; height: 56px; border-radius: 12px; border: 1px solid var(--line); overflow: hidden; }
   .attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .attach-remove {
-    position: absolute; top: -7px; right: -7px; width: 16px; height: 16px; line-height: 14px;
-    background: var(--red); color: #fff; border: 1px solid var(--bg); font-size: 11px; padding: 0;
+    position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; line-height: 16px;
+    background: var(--coral); color: var(--abyss); border-radius: 50%; font-size: 12px; font-weight: 700; padding: 0;
   }
 
-  /* Input row */
+  /* input row */
   .input-row {
     display: flex; align-items: flex-end; gap: 10px;
-    border-top: 1px solid var(--border); padding: 12px 14px; flex: 0 0 auto;
+    margin: 12px 16px 16px; padding: 8px 8px 8px 20px; flex: 0 0 auto;
+    background: var(--card-2); border: 1px solid var(--line); border-radius: 999px;
+    transition: border-color var(--t1);
   }
-  .input-caret { color: var(--amber); font-weight: 700; padding-bottom: 8px; }
+  .input-row:focus-within { border-color: var(--mint); }
+  .input-caret { display: none; }
   .input-field {
-    flex: 1; resize: none; background: none; border: none; color: var(--cream);
-    font-family: var(--mono); font-size: 13px; line-height: 1.5; max-height: 140px; padding: 6px 2px;
-    letter-spacing: 0.02em;
+    flex: 1; resize: none; background: none; border: none; color: var(--ink);
+    font-family: var(--body); font-size: 14.5px; line-height: 1.5; max-height: 140px; padding: 8px 2px;
   }
-  .input-field::placeholder { color: var(--faint); letter-spacing: 0.1em; }
+  .input-field::placeholder { color: var(--dim); font-family: var(--disp); font-weight: 700; text-transform: lowercase; }
+  .input-field:focus-visible { outline: none; }
 
-  /* System log */
-  .log-scroll { flex: 1; overflow-y: auto; padding: 12px 14px; font-size: 11.5px; min-height: 0; }
-  .log-line { padding: 6px 0; border-bottom: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; color: var(--dim); }
-  .log-line .tag { display: inline-block; font-size: 9.5px; letter-spacing: 0.1em; padding: 1px 6px; margin-right: 8px; border: 1px solid var(--border); }
-  .log-line.ok .tag { color: var(--green); border-color: var(--green); }
-  .log-line.error .tag { color: var(--red); border-color: var(--red); }
-  .log-line.running .tag { color: var(--amber); border-color: var(--amber); }
-  .log-line.warn .tag { color: var(--amber); border-color: var(--amber); }
-  .log-line.log .tag { color: var(--dim); }
-  .log-line .cmd { color: var(--cream); }
-  .log-empty { color: var(--faint); font-size: 12px; letter-spacing: 0.12em; text-align: center; padding: 40px 10px; }
+  /* system log */
+  .log-scroll { flex: 1; overflow-y: auto; padding: 8px 20px 14px; font-family: var(--mono); font-size: 11.5px; min-height: 0; }
+  .log-line { padding: 7px 0; border-bottom: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; color: var(--mut); }
+  .log-line .tag {
+    display: inline-block; font-family: var(--disp); font-weight: 700; font-size: 10px;
+    text-transform: lowercase; padding: 1px 9px; margin-right: 8px;
+    border-radius: 999px; background: var(--card-2); color: var(--dim);
+  }
+  .log-line.ok .tag { color: var(--abyss); background: var(--mint); }
+  .log-line.error .tag { color: var(--abyss); background: var(--coral); }
+  .log-line.running .tag { color: var(--mint); background: var(--mint-dk); }
+  .log-line.warn .tag { color: var(--coral); background: rgba(255, 122, 112, 0.14); }
+  .log-line .cmd { color: var(--ink); }
+  .log-empty { color: var(--dim); font-family: var(--disp); font-weight: 700; font-size: 13px; text-align: center; padding: 40px 10px; text-transform: lowercase; }
   .log-copy-btn {
-    font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
-    background: transparent; color: #000; border: 1px solid rgba(0,0,0,0.5);
-    padding: 2px 12px; cursor: pointer;
+    font-family: var(--disp); font-weight: 700; font-size: 12px; text-transform: lowercase;
+    background: var(--card-2); color: var(--mut); border: 1px solid var(--line);
+    border-radius: 999px; padding: 3px 14px; cursor: pointer;
   }
-  .log-copy-btn:hover { background: rgba(0,0,0,0.12); }
-  .log-copy-btn:active { background: rgba(0,0,0,0.22); }
+  .log-copy-btn:hover { color: var(--ink); background: var(--mint-dk); }
 
-  /* Options / debug panel */
-  .options-scroll { flex: 1; overflow-y: auto; padding: 16px; min-height: 0; }
-  .opt-section { max-width: 640px; margin: 0 auto 22px; }
+  /* options / debug panel */
+  .options-scroll { flex: 1; overflow-y: auto; padding: 6px 20px 20px; min-height: 0; }
+  .opt-section { max-width: 640px; margin: 0 auto 24px; }
   .opt-section:last-child { margin-bottom: 0; }
-  .opt-title { color: var(--amber); font-size: 11px; font-weight: 700; letter-spacing: 0.18em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-  .opt-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 0; font-size: 12px; letter-spacing: 0.06em; }
-  .opt-row .k { color: var(--dim); }
-  .opt-row .k small { display: block; color: var(--faint); font-size: 10px; letter-spacing: 0.06em; margin-top: 2px; }
-  .opt-row .ctl { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
-  .opt-row .ctl .btn, .opt-row .ctl .sel { font-size: 11px; padding: 6px 12px; }
-  .opt-row .ctl select.sel { width: auto; }
-  .opt-input {
-    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
-    color: var(--amber); background: var(--panel-2);
-    border: 1px solid var(--border); padding: 7px 10px; width: 190px;
+  .opt-title {
+    font-family: var(--disp); font-weight: 800; font-size: 15px; letter-spacing: -0.02em;
+    text-transform: lowercase; color: var(--ink);
+    margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
   }
-  .opt-input::placeholder { color: var(--faint); }
-  .opt-input:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
-  .opt-note { color: var(--faint); font-size: 11px; margin-top: 6px; letter-spacing: 0.06em; }
+  .opt-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; font-size: 13px; }
+  .opt-row .k { color: var(--mut); font-family: var(--disp); font-weight: 700; text-transform: lowercase; }
+  .opt-row .k small { display: block; color: var(--dim); font-family: var(--body); font-weight: 400; font-size: 11px; text-transform: none; margin-top: 2px; }
+  .opt-row .ctl { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+  .opt-row .ctl .btn, .opt-row .ctl .sel { font-size: 12px; padding: 6px 14px; }
+  .opt-row .ctl select.sel { width: auto; flex: 0 0 auto; }
+  .opt-input {
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--ink); background: var(--card-2);
+    border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; width: 200px;
+  }
+  .opt-input::placeholder { color: var(--dim); }
+  .opt-note { color: var(--dim); font-size: 12px; margin-top: 6px; }
   .opt-pre {
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--dim);
-    font-size: 10.5px; padding: 10px; margin-top: 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px; color: var(--mut);
+    font-family: var(--mono); font-size: 10.5px; padding: 12px; margin-top: 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
   }
 
   /* ── Footer ─────────────────────────────────────────────────────────── */
-  .footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 10.5px; letter-spacing: 0.16em; color: var(--faint); }
-
-  /* Reminder toast */
-  .toast-stack { position: fixed; top: 22px; right: 26px; z-index: 200; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
-  .toast {
-    background: var(--panel); border: 1px solid var(--amber); box-shadow: 0 0 16px rgba(244,167,29,0.25);
-    padding: 12px 16px; max-width: 320px; animation: toast-in 0.25s ease-out;
+  .footer {
+    margin-top: 14px; padding: 8px 4px 0;
+    font-family: var(--disp); font-weight: 700; font-size: 11.5px;
+    color: var(--dim); text-transform: lowercase;
   }
-  .toast .toast-tag { color: var(--amber); font-size: 10px; font-weight: 700; letter-spacing: 0.18em; margin-bottom: 4px; }
-  .toast .toast-body { color: var(--cream); font-size: 12.5px; letter-spacing: 0.02em; }
+
+  /* reminder toast */
+  .toast-stack { position: fixed; top: 24px; right: 28px; z-index: 200; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+  .toast {
+    background: #10151d; border: 1px solid var(--mint); border-radius: 18px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    padding: 14px 18px; max-width: 320px; animation: toast-in 0.5s var(--spring);
+  }
+  .toast .toast-tag { color: var(--mint); font-family: var(--disp); font-weight: 800; font-size: 12px; text-transform: lowercase; margin-bottom: 4px; }
+  .toast .toast-body { color: var(--ink); font-size: 13px; }
   .toast.leaving { animation: toast-out 0.35s ease-in forwards; }
-  @keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes toast-in { from { opacity: 0; transform: translateX(20px) scale(0.95); } to { opacity: 1; transform: none; } }
   @keyframes toast-out { to { opacity: 0; transform: translateX(16px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
+    .dot { animation: none; }
+    .bg i { animation: none; }
+  }
 </style>
 </head>
 <body>
-<div class="scan" aria-hidden="true"></div>
+<div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
 <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
 <div class="app">
   <header class="header">
     <div class="brand">
-      <div class="logo">CADEN</div>
-      <div class="bars" aria-hidden="true"><i></i><i></i><i></i></div>
-      <div class="subtitle up">Domestic Agent System</div>
+      <div class="logo">caden</div>
+      <div class="subtitle up">a small intelligence, living at home</div>
     </div>
     <div class="idbox">
-      <div class="row"><span class="k">UNIT</span><span class="v">CADEN</span></div>
-      <div class="row"><span class="k">MODE</span><span class="v">NODE</span></div>
-      <div class="row"><span class="k">LINK</span><span class="v"><span class="dot" id="linkDot"></span><span id="linkText">…</span></span></div>
+      <div class="row"><span class="k">link</span><span class="v"><span class="dot" id="linkDot"></span><span id="linkText">…</span></span></div>
     </div>
   </header>
 
   <div class="sysline">
-    <span class="sys-tag">SYS</span>
+    <span class="sys-tag">sys</span>
     <span class="sys-text up" id="sysText">BOOTING // STAND BY</span>
   </div>
 
   <nav class="tabs">
-    <button class="tab on" id="tabChat"><span class="sq"></span>CHAT</button>
-    <button class="tab" id="tabSystem"><span class="sq"></span>SYSTEM</button>
-    <button class="tab" id="tabOptions"><span class="sq"></span>OPTIONS</button>
+    <button class="tab on" id="tabChat"><span class="sq"></span>chat</button>
+    <button class="tab" id="tabSystem"><span class="sq"></span>system</button>
+    <button class="tab" id="tabOptions"><span class="sq"></span>options</button>
   </nav>
 
   <section class="main">
     <div class="col-left">
       <div class="panel">
-        <div class="panel-head">SESSION</div>
+        <div class="panel-head">session</div>
         <div class="panel-body">
           <div class="session-row">
             <select class="sel" id="agentSelect" aria-label="Persona">
-              <option value="caden">Caden</option>
-              <option value="researcher">Research</option>
-              <option value="scout">Scout</option>
+              <option value="caden">caden</option>
+              <option value="researcher">research</option>
+              <option value="scout">scout</option>
             </select>
-            <button class="btn" id="newBtn">New</button>
+            <button class="btn" id="newBtn">new</button>
           </div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head">TELEMETRY</div>
+        <div class="panel-head">telemetry</div>
         <div class="panel-body">
-          <div class="subline up">Key Pool · Groq</div>
+          <div class="subline up">key pool · groq</div>
           <div class="seg" id="keySeg"></div>
-          <div class="kv"><span class="k">MAINFRAME</span><span class="v" id="tMainframe">—</span></div>
-          <div class="kv"><span class="k">SW REV</span><span class="v" id="tSha">—</span></div>
-          <div class="kv"><span class="k">UPTIME</span><span class="v" id="tUptime">—</span></div>
-          <div class="kv"><span class="k">GROQ</span><span class="v" id="tGroq">—</span></div>
-          <div class="kv"><span class="k">GEMINI</span><span class="v" id="tGemini">—</span></div>
-          <div class="kv"><span class="k">BROWSER</span><span class="v" id="tBrowser">—</span></div>
-          <div class="kv"><span class="k">CLOCK</span><span class="v" id="tClock">—</span></div>
+          <div class="kv"><span class="k">mainframe</span><span class="v" id="tMainframe">—</span></div>
+          <div class="kv"><span class="k">sw rev</span><span class="v" id="tSha">—</span></div>
+          <div class="kv"><span class="k">uptime</span><span class="v" id="tUptime">—</span></div>
+          <div class="kv"><span class="k">groq</span><span class="v" id="tGroq">—</span></div>
+          <div class="kv"><span class="k">gemini</span><span class="v" id="tGemini">—</span></div>
+          <div class="kv"><span class="k">browser</span><span class="v" id="tBrowser">—</span></div>
+          <div class="kv"><span class="k">clock</span><span class="v" id="tClock">—</span></div>
         </div>
       </div>
 
       <div class="modelbox">
-        MODEL CADEN-1<br>
-        SER NO 000451<br>
-        MADE FOR THE HOME<br>
-        OF TOMORROW
+        model caden-1<br>
+        ser no 000451<br>
+        made for the home<br>
+        of tomorrow
       </div>
     </div>
 
     <div class="col-main">
       <!-- CHAT -->
       <div class="panel view" id="viewChat">
-        <div class="panel-head">CONVERSATION <span class="meta up" id="convMeta">Caden</span></div>
+        <div class="panel-head">conversation <span class="meta up" id="convMeta">Caden</span></div>
         <div class="conv-scroll" id="chatScroll">
           <div class="conv-inner" id="chatInner">
-            <div class="conv-empty up" id="chatEmpty"><span class="big">CADEN</span>online // awaiting input</div>
+            <div class="conv-empty up" id="chatEmpty"><span class="big">hello.</span>i'm here — say something</div>
           </div>
         </div>
         <div class="attach-row" id="attachRow"></div>
         <div class="input-row">
           <span class="input-caret">&gt;</span>
-          <textarea class="input-field" id="inputField" placeholder="Type a message" rows="1"></textarea>
+          <textarea class="input-field" id="inputField" placeholder="talk to caden" rows="1"></textarea>
           <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
-          <button class="btn" id="attachBtn" title="Attach an image">Attach</button>
-          <button class="btn btn-cancel" id="cancelBtn" title="Stop retrying and cancel this request" style="display:none">Cancel</button>
-          <button class="btn btn-amber" id="sendBtn">Send</button>
+          <button class="btn" id="attachBtn" title="Attach an image">attach</button>
+          <button class="btn btn-cancel" id="cancelBtn" title="Stop retrying and cancel this request" style="display:none">cancel</button>
+          <button class="btn btn-amber" id="sendBtn">send</button>
         </div>
       </div>
 
       <!-- SYSTEM -->
       <div class="panel view hidden" id="viewSystem">
         <div class="panel-head">
-          <span>SYSTEM LOG <span class="meta up">All Activity</span></span>
-          <button class="log-copy-btn up" id="logCopyBtn" type="button">Copy</button>
+          <span>system log <span class="meta up">all activity</span></span>
+          <button class="log-copy-btn up" id="logCopyBtn" type="button">copy</button>
         </div>
         <div class="log-scroll" id="logBody">
-          <div class="log-empty up" id="logEmpty">No activity yet</div>
+          <div class="log-empty up" id="logEmpty">no activity yet</div>
         </div>
       </div>
 
       <!-- OPTIONS -->
       <div class="panel view hidden" id="viewOptions">
-        <div class="panel-head">OPTIONS <span class="meta up">Configuration &amp; Debug</span></div>
+        <div class="panel-head">options <span class="meta up">configuration &amp; debug</span></div>
         <div class="options-scroll">
           <div class="opt-section">
-            <div class="opt-title up">Audio</div>
+            <div class="opt-title up">audio</div>
             <div class="opt-row">
-              <span class="k">Status SFX</span>
+              <span class="k">status sfx</span>
               <span class="ctl"><button class="btn" id="optSfxBtn">On</button></span>
             </div>
             <div class="opt-row">
-              <span class="k">Voice (Gemini TTS)<small>Reads Caden's replies aloud</small></span>
+              <span class="k">voice (gemini tts)<small>Reads Caden's replies aloud</small></span>
               <span class="ctl"><button class="btn" id="optTtsBtn">On</button></span>
             </div>
             <div class="opt-row">
-              <span class="k">Test a sound<small>Plays locally right now, no chat turn needed</small></span>
+              <span class="k">test a sound<small>Plays locally right now, no chat turn needed</small></span>
               <span class="ctl">
-                <button class="btn" data-sfx-test="sent">Sent</button>
-                <button class="btn" data-sfx-test="thinking">Thinking</button>
-                <button class="btn" data-sfx-test="success">Success</button>
-                <button class="btn" data-sfx-test="error">Error</button>
-                <button class="btn" data-sfx-test="reminder">Reminder</button>
-                <button class="btn" data-sfx-test="startup">Startup</button>
+                <button class="btn" data-sfx-test="sent">sent</button>
+                <button class="btn" data-sfx-test="thinking">thinking</button>
+                <button class="btn" data-sfx-test="success">success</button>
+                <button class="btn" data-sfx-test="error">error</button>
+                <button class="btn" data-sfx-test="reminder">reminder</button>
+                <button class="btn" data-sfx-test="startup">startup</button>
               </span>
             </div>
             <div class="opt-row">
-              <span class="k">Pi/browser sync<small id="optSfxTiming">—</small></span>
+              <span class="k">pi/browser sync<small id="optSfxTiming">—</small></span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">Browser</div>
+            <div class="opt-title up">browser</div>
             <div class="opt-row">
-              <span class="k">Mode override<small>Takes effect on next launch — use Restart to force it now</small></span>
+              <span class="k">mode override<small>Takes effect on next launch — use Restart to force it now</small></span>
               <span class="ctl">
                 <select class="sel" id="optBrowserMode">
-                  <option value="auto">Auto</option>
-                  <option value="local">Local</option>
-                  <option value="stream">Stream</option>
+                  <option value="auto">auto</option>
+                  <option value="local">local</option>
+                  <option value="stream">stream</option>
                 </select>
               </span>
             </div>
             <div class="opt-row">
-              <span class="k">Restart browser<small>Closes the current instance; relaunches on next use</small></span>
-              <span class="ctl"><button class="btn" id="optBrowserRestart">Restart</button></span>
+              <span class="k">restart browser<small>Closes the current instance; relaunches on next use</small></span>
+              <span class="ctl"><button class="btn" id="optBrowserRestart">restart</button></span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">Self-Update</div>
+            <div class="opt-title up">self-update</div>
             <div class="opt-row">
-              <span class="k">Poll interval</span>
+              <span class="k">poll interval</span>
               <span class="ctl">
                 <select class="sel" id="optUpdateInterval">
                   <option value="30000">30s</option>
@@ -472,85 +552,85 @@
               </span>
             </div>
             <div class="opt-row">
-              <span class="k">Check now<small id="optUpdateMeta">—</small></span>
+              <span class="k">check now<small id="optUpdateMeta">—</small></span>
               <span class="ctl"><button class="btn" id="optCheckNow">Check Now</button></span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">Memory</div>
+            <div class="opt-title up">memory</div>
             <div class="opt-row">
-              <span class="k">What Caden remembers<small id="optMemorySummary">—</small></span>
-              <span class="ctl"><button class="btn" id="optForget">Forget Me</button></span>
+              <span class="k">what caden remembers<small id="optMemorySummary">—</small></span>
+              <span class="ctl"><button class="btn" id="optForget">forget me</button></span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">Reminders</div>
+            <div class="opt-title up">reminders</div>
             <div class="opt-row">
-              <span class="k">Pending<small>Set with "remind me..." in chat — surfaces here, as a live toast, and next time you talk</small></span>
+              <span class="k">pending<small>Set with "remind me..." in chat — surfaces here, as a live toast, and next time you talk</small></span>
             </div>
             <div id="optReminderList" class="opt-note">No pending reminders</div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">Telegram</div>
+            <div class="opt-title up">telegram</div>
             <div class="opt-row">
-              <span class="k">Status<small>Reachable from outside the house once a token and at least one allowed chat id are set — see CLAUDE.md for getting your chat id</small></span>
+              <span class="k">status<small>Reachable from outside the house once a token and at least one allowed chat id are set — see CLAUDE.md for getting your chat id</small></span>
             </div>
             <div id="optTelegramStatus" class="opt-note">—</div>
             <div class="opt-row">
-              <span class="k">Bot token<small>From @BotFather — never shown back once saved</small></span>
+              <span class="k">bot token<small>From @BotFather — never shown back once saved</small></span>
               <span class="ctl">
                 <input type="password" id="optTelegramToken" class="opt-input" placeholder="123456789:AA..." autocomplete="off" spellcheck="false">
-                <button class="btn" id="optTelegramSaveToken">Save</button>
-                <button class="btn btn-cancel" id="optTelegramClearToken">Clear</button>
+                <button class="btn" id="optTelegramSaveToken">save</button>
+                <button class="btn btn-cancel" id="optTelegramClearToken">clear</button>
               </span>
             </div>
             <div class="opt-row">
-              <span class="k">Allowed chat IDs<small>Comma-separated — anyone else is ignored and logged to System Log</small></span>
+              <span class="k">allowed chat ids<small>Comma-separated — anyone else is ignored and logged to System Log</small></span>
               <span class="ctl">
                 <input type="text" id="optTelegramChatIds" class="opt-input" placeholder="123456789, 987654321" autocomplete="off" spellcheck="false">
-                <button class="btn" id="optTelegramSaveIds">Save</button>
+                <button class="btn" id="optTelegramSaveIds">save</button>
               </span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">Weather</div>
+            <div class="opt-title up">weather</div>
             <div class="opt-row">
-              <span class="k">Status<small>Without a key, get_weather still works via wttr.in — a key just upgrades the source</small></span>
+              <span class="k">status<small>Without a key, get_weather still works via wttr.in — a key just upgrades the source</small></span>
             </div>
             <div id="optWeatherStatus" class="opt-note">—</div>
             <div class="opt-row">
-              <span class="k">OpenWeatherMap API key<small>Free at openweathermap.org/api — never shown back once saved</small></span>
+              <span class="k">openweathermap api key<small>Free at openweathermap.org/api — never shown back once saved</small></span>
               <span class="ctl">
                 <input type="password" id="optWeatherKey" class="opt-input" placeholder="API key" autocomplete="off" spellcheck="false">
-                <button class="btn" id="optWeatherSaveKey">Save</button>
-                <button class="btn btn-cancel" id="optWeatherClearKey">Clear</button>
+                <button class="btn" id="optWeatherSaveKey">save</button>
+                <button class="btn btn-cancel" id="optWeatherClearKey">clear</button>
               </span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">Remote Access</div>
+            <div class="opt-title up">remote access</div>
             <div class="opt-row">
-              <span class="k">Status<small id="optRemoteStatus">Loading this page directly from the Pi — leave blank</small></span>
+              <span class="k">status<small id="optRemoteStatus">Loading this page directly from the Pi — leave blank</small></span>
             </div>
             <div class="opt-row">
-              <span class="k">Caden server address<small>Only needed when this exact page is loaded from somewhere else (e.g. GitHub Pages) and can't reach the Pi at a relative path — e.g. http://&lt;pi-ip-or-hostname&gt;:7777. Reloads the page once saved.</small></span>
+              <span class="k">caden server address<small>Only needed when this exact page is loaded from somewhere else (e.g. GitHub Pages) and can't reach the Pi at a relative path — e.g. http://&lt;pi-ip-or-hostname&gt;:7777. Reloads the page once saved.</small></span>
               <span class="ctl">
                 <input type="text" id="optRemoteBase" class="opt-input" placeholder="http://192.168.1.50:7777" autocomplete="off" spellcheck="false">
-                <button class="btn" id="optRemoteSave">Save</button>
-                <button class="btn btn-cancel" id="optRemoteClear">Clear</button>
+                <button class="btn" id="optRemoteSave">save</button>
+                <button class="btn btn-cancel" id="optRemoteClear">clear</button>
               </span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">Raw Status</div>
+            <div class="opt-title up">raw status</div>
             <details>
-              <summary style="cursor:pointer; color: var(--dim); font-size:11px; letter-spacing:0.1em;">/api/status</summary>
+              <summary style="cursor:pointer; color: var(--dim); font-size:12px;">/api/status</summary>
               <pre class="opt-pre" id="optRawStatus">—</pre>
             </details>
           </div>
@@ -559,7 +639,7 @@
     </div>
   </section>
 
-  <div class="footer up">Caden Agent Console // For Indoor Use Only // Full System Access Enabled</div>
+  <div class="footer up">caden lives here · full access, audited · for indoor use only</div>
 </div>
 <script>
 (() => {
