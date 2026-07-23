@@ -1,27 +1,50 @@
-// Generator for Caden's status SFX (sent/success/error) — synthesized, not
-// downloaded, so there's no license/CDN dependency. Re-run after editing to
-// regenerate public/sfx/*.wav: node scripts/gen-sfx.mjs public/sfx
+// Generator for Caden's status SFX — synthesized, not downloaded, so there's
+// no license/CDN dependency. Re-run after editing to regenerate
+// public/sfx/*.wav: node scripts/gen-sfx.mjs public/sfx
+//
+// Sound language: soft filtered sine glides and layered shimmer tones —
+// the modern-AI-assistant register (think Siri/Meta AI's product chimes:
+// smooth pitch sweeps, glassy overtones, exponential envelopes) rather than
+// the earlier chiptune-style discrete square-wave notes. No hard edges
+// anywhere: every tone is built from phase-accumulated sine glides (so
+// pitch actually curves smoothly instead of jump-cutting between fixed
+// notes) and passed through a one-pole lowpass at the end to round off any
+// residual digital harshness.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const SAMPLE_RATE = 44100;
 
-function tone({ freq, ms, type = "sine", gain = 0.5, fadeMs = 8 }) {
+// A single continuous tone whose pitch glides from freqFrom to freqTo (both
+// equal for a flat tone) using phase accumulation — integrating
+// instantaneous frequency into phase sample-by-sample, not just plugging a
+// time-varying frequency into sin(2*pi*f*t), which would distort the sweep.
+// This is what actually makes a glide sound smooth and "filtered" rather
+// than like a series of tiny pitch jumps. envelope is "exp" (soft, rounded
+// attack/release — the modern-assistant character) or "linear".
+function glideTone({ freqFrom, freqTo, ms, gain = 0.4, envelope = "exp", shimmer = 0 }) {
   const n = Math.round((ms / 1000) * SAMPLE_RATE);
-  const fadeN = Math.min(Math.round((fadeMs / 1000) * SAMPLE_RATE), Math.floor(n / 2));
   const samples = new Float64Array(n);
+  let phase = 0;
+  let shimmerPhase = 0;
   for (let i = 0; i < n; i++) {
-    const t = i / SAMPLE_RATE;
-    let v;
-    if (type === "square") {
-      v = Math.sign(Math.sin(2 * Math.PI * freq * t));
+    const t = i / n; // 0..1 through this tone
+    const freq = freqFrom + (freqTo - freqFrom) * t;
+    phase += (2 * Math.PI * freq) / SAMPLE_RATE;
+    shimmerPhase += (2 * Math.PI * freq * 2) / SAMPLE_RATE; // a quiet octave-up layer for glassy warmth
+    const v = Math.sin(phase) + shimmer * Math.sin(shimmerPhase);
+    // Exponential-ish envelope (soft attack, gentle rounded release) reads
+    // as "filtered/premium" — a plain linear ramp is what made the old
+    // square-wave tones feel blippy/retro.
+    let env;
+    if (envelope === "exp") {
+      const attack = Math.min(1, t / 0.12);
+      const release = Math.min(1, (1 - t) / 0.35);
+      env = Math.pow(attack, 1.5) * Math.pow(release, 0.8);
     } else {
-      v = Math.sin(2 * Math.PI * freq * t);
+      const fadeT = 0.08;
+      env = Math.min(1, t / fadeT, (1 - t) / fadeT);
     }
-    // envelope: linear fade in/out to avoid clicks
-    let env = 1;
-    if (i < fadeN) env = i / fadeN;
-    else if (i > n - fadeN) env = (n - i) / fadeN;
     samples[i] = v * gain * env;
   }
   return samples;
@@ -37,14 +60,15 @@ function silence(ms) {
 // `ms` — so sample[0] and the sample just past the end are bit-identical to
 // where the previous repetition left off. Web Audio's loop=true just plays
 // the buffer back to back, so periodicity is the only thing that matters.
-function loopableTone({ ms, carrierFreq, modFreq, gainBase, gainDepth }) {
+function loopableTone({ ms, carrierFreq, modFreq, gainBase, gainDepth, shimmerFreq, shimmerGain = 0 }) {
   const n = Math.round((ms / 1000) * SAMPLE_RATE);
   const samples = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const t = i / SAMPLE_RATE;
     const carrier = Math.sin(2 * Math.PI * carrierFreq * t);
+    const shimmer = shimmerGain ? Math.sin(2 * Math.PI * shimmerFreq * t) * shimmerGain : 0;
     const env = gainBase + gainDepth * (0.5 + 0.5 * Math.sin(2 * Math.PI * modFreq * t));
-    samples[i] = carrier * env;
+    samples[i] = (carrier + shimmer) * env;
   }
   return samples;
 }
@@ -54,6 +78,22 @@ function concat(...parts) {
   const out = new Float64Array(total);
   let off = 0;
   for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+
+// One-pole lowpass, applied last — softens any remaining stair-stepped
+// digital edge into the smooth, slightly "muffled-premium" character
+// modern assistant chimes have, instead of a fully bright/raw synth tone.
+function lowpass(samples, cutoffHz) {
+  const rc = 1 / (2 * Math.PI * cutoffHz);
+  const dt = 1 / SAMPLE_RATE;
+  const alpha = dt / (rc + dt);
+  const out = new Float64Array(samples.length);
+  let prev = 0;
+  for (let i = 0; i < samples.length; i++) {
+    prev = prev + alpha * (samples[i] - prev);
+    out[i] = prev;
+  }
   return out;
 }
 
@@ -83,54 +123,74 @@ function toWav(samples) {
 
 const OUT_DIR = process.argv[2] || ".";
 
-// "sent" — a quick soft double-blip acknowledging input left the building.
-const sent = concat(
-  tone({ freq: 660, ms: 55, gain: 0.35 }),
-  silence(18),
-  tone({ freq: 880, ms: 65, gain: 0.4 }),
+// "sent" — a quick soft upward whoosh-blip (one continuous glide, not two
+// discrete notes) — a message leaving, in one breath.
+const sent = lowpass(
+  glideTone({ freqFrom: 520, freqTo: 920, ms: 130, gain: 0.34, shimmer: 0.12 }),
+  6000,
 );
 
-// "success" — a small resolving three-note arpeggio (C5-E5-G5).
-const success = concat(
-  tone({ freq: 523.25, ms: 85, gain: 0.35 }),
-  silence(12),
-  tone({ freq: 659.25, ms: 85, gain: 0.4 }),
-  silence(12),
-  tone({ freq: 783.99, ms: 140, gain: 0.42 }),
+// "success" — a smooth rising glide with a touch of glassy shimmer,
+// replacing the old three-note chiptune arpeggio with one continuous
+// affirming sweep — the modern-assistant "mm, done" register.
+const success = lowpass(
+  concat(
+    glideTone({ freqFrom: 523.25, freqTo: 659.25, ms: 150, gain: 0.32, shimmer: 0.15 }),
+    silence(8),
+    glideTone({ freqFrom: 659.25, freqTo: 987.77, ms: 190, gain: 0.36, shimmer: 0.18 }),
+  ),
+  7200,
 );
 
-// "error" — two low descending square-wave tones, harsher, alert-like.
-const error = concat(
-  tone({ freq: 220.0, ms: 130, type: "square", gain: 0.22, fadeMs: 6 }),
-  silence(16),
-  tone({ freq: 146.83, ms: 200, type: "square", gain: 0.24, fadeMs: 6 }),
+// "error" — a soft, low downward glide — still clearly "something's off"
+// via the falling pitch and a mild shimmer-beat dissonance, but filtered
+// and rounded rather than the harsh square-wave alarm this replaced.
+const error = lowpass(
+  concat(
+    glideTone({ freqFrom: 330, freqTo: 233, ms: 170, gain: 0.3, shimmer: 0.22 }),
+    silence(14),
+    glideTone({ freqFrom: 220, freqTo: 155, ms: 230, gain: 0.32, shimmer: 0.22 }),
+  ),
+  3200,
 );
 
 // "thinking" — a soft, slowly-breathing hum, looped for as long as a turn
 // is actually doing tool work (see startThinkingLoop in sfx.ts / loop=true
 // in index.html) rather than a single blip — 330Hz carrier with a gentle
-// 3Hz pulse, both an exact whole number of cycles over 1 second so the loop
-// point is inaudible.
-const thinking = loopableTone({ ms: 1000, carrierFreq: 330, modFreq: 3, gainBase: 0.09, gainDepth: 0.05 });
+// 3Hz pulse and a very quiet fifth-above shimmer layer for warmth, all an
+// exact whole number of cycles over 1 second so the loop point is inaudible.
+// Deliberately NOT passed through lowpass() like the others: a causal
+// filter starts from a cold (zero) internal state, so filtering a loop unit
+// directly would leave sample[0] mismatched with the (steady-state
+// filtered) value at the end — reintroducing exactly the audible click at
+// the wrap point this loop's whole-cycle-count math was built to avoid.
+// The raw tone is already soft/pure (low gain, sine-only) and doesn't need
+// it anyway.
+const thinking = loopableTone({ ms: 1000, carrierFreq: 330, modFreq: 3, gainBase: 0.09, gainDepth: 0.05, shimmerFreq: 495, shimmerGain: 0.02 });
 
-// "reminder" — a warm two-tone doorbell-style chime (perfect fourth up),
-// deliberately the most attention-getting sound since it fires unprompted.
-const reminder = concat(
-  tone({ freq: 587.33, ms: 160, gain: 0.4 }),
-  silence(30),
-  tone({ freq: 440.0, ms: 220, gain: 0.42 }),
+// "reminder" — a warm two-tone glide (perfect fourth up), deliberately the
+// most attention-getting sound since it fires unprompted — kept brighter
+// and less filtered than the others so it still cuts through.
+const reminder = lowpass(
+  concat(
+    glideTone({ freqFrom: 587.33, freqTo: 587.33, ms: 170, gain: 0.38, shimmer: 0.2 }),
+    silence(26),
+    glideTone({ freqFrom: 440, freqTo: 440, ms: 240, gain: 0.4, shimmer: 0.2 }),
+  ),
+  8000,
 );
 
-// "startup" — a brighter four-note ascending sweep ("systems online"),
-// longer and more ceremonial since it plays once per boot, not per turn.
-const startup = concat(
-  tone({ freq: 392.0, ms: 90, gain: 0.32 }),
-  silence(10),
-  tone({ freq: 523.25, ms: 90, gain: 0.34 }),
-  silence(10),
-  tone({ freq: 659.25, ms: 90, gain: 0.36 }),
-  silence(10),
-  tone({ freq: 880.0, ms: 160, gain: 0.4 }),
+// "startup" — one continuous rising swell ("systems coming online") instead
+// of four discrete chiptune notes — longer and more ceremonial since it
+// plays once per boot, not per turn, with shimmer building through the
+// sweep for a sense of things "waking up".
+const startup = lowpass(
+  concat(
+    glideTone({ freqFrom: 261.63, freqTo: 392.0, ms: 140, gain: 0.28, shimmer: 0.1 }),
+    glideTone({ freqFrom: 392.0, freqTo: 587.33, ms: 140, gain: 0.32, shimmer: 0.16 }),
+    glideTone({ freqFrom: 587.33, freqTo: 987.77, ms: 220, gain: 0.38, shimmer: 0.24 }),
+  ),
+  7500,
 );
 
 writeFileSync(join(OUT_DIR, "sent.wav"), toWav(sent));
