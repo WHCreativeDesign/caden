@@ -87,67 +87,59 @@
   .footer   { animation: reveal 0.8s 0.85s var(--ease) both; }
   @keyframes reveal { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-  /* ── The node mark — two liquid squares. Two rounded squares, no
-        rotation at all — each one instead SNAPS between fixed stops
-        arranged in a circle around the mark's center (steps() timing, so
-        the position jumps instantly rather than gliding), while
-        independently wobbling its own outline smoothly in place. Position
-        and wobble are genuinely separate animations on the standalone
-        `translate`/`scale` transform properties (not the `transform`
-        shorthand) specifically so one can be stepped and the other eased
-        without either overriding the other's timing. Square A snaps
-        through 6 stops on a 9px-radius circle every 9s; square B snaps
-        through 5 stops on an 11px-radius circle every 11s — different
-        stop counts and radii mean the pair is very rarely at matching
-        angles, so which stops overlap keeps recomposing rather than
-        repeating in a short, obvious cycle. The SVG goo filter
-        (#caden-goo, defined once near the top of <body>) is what turns
-        the overlap into one fused, melted shape instead of two flat
-        squares stacked on top of each other: it blurs both, then a steep
-        alpha-contrast pass turns the blur back into a hard edge, so the
-        blurred haze where they meet reads as liquid meniscus, not a sharp
-        intersection line. Pure CSS/SVG, no JS. ── */
+  /* ── The node mark — two liquid squares chasing each other around four
+        diagonal corners. One shared 4-stop cycle (point 1 → 2 → 3 → 4 →
+        back to 1, steps() timing so each jump is instant, no gliding, no
+        rotation anywhere) — both squares run the exact same keyframes at
+        the exact same speed, so their relative spacing never drifts.
+        Square B is offset by exactly half the cycle (a −(duration/2)
+        delay, i.e. 2 of the 4 stops), so it's always sitting on the
+        diagonally opposite corner from square A: A on 1 ⇒ B on 3, A on 2
+        ⇒ B on 4, forever in lockstep. The four points themselves sit at
+        45/135/225/315° — the corners of a diamond — so "B is on the
+        opposite point" reads as literally diagonally opposite/parallel,
+        not just some other spot on a circle. The SVG goo filter
+        (#caden-goo, defined once near the top of <body>) fuses the two
+        into one liquid shape while they're close together (points 1↔2,
+        2↔3, etc. are adjacent) and lets them read as two distinct squares
+        when they're on opposite corners. Each square also wobbles its own
+        outline smoothly in place (separate `scale`/border-radius
+        animation) — position and wobble are on the standalone
+        `translate`/`scale` transform properties rather than the
+        `transform` shorthand specifically so one can be stepped and the
+        other eased without either overriding the other's timing. Pure
+        CSS/SVG, no JS. ── */
   .mark { position: relative; width: 50px; height: 50px; filter: url(#caden-goo); }
   .mark i.f {
     position: absolute; top: 50%; left: 50%; width: 23px; height: 23px; margin: -11.5px;
     background: var(--wht);
     border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%;
-    animation: ooze-in 0.7s var(--ease) both, snap-a 9s steps(1) infinite, wobble-a 6s ease-in-out infinite;
+    animation: ooze-in 0.7s var(--ease) both, snap-corners 8s steps(1) infinite, wobble-a 6s ease-in-out infinite;
   }
   .mark i.f:nth-of-type(2) {
-    animation-name: ooze-in, snap-b, wobble-b;
-    animation-duration: 0.7s, 11s, 7s;
-    animation-delay: 0.35s, 0s, 0.5s;
+    animation-name: ooze-in, snap-corners, wobble-b;
+    animation-duration: 0.7s, 8s, 7s;
+    /* -4s is exactly half of snap-corners' 8s duration: this is what locks
+       square B to point 1+2 (i.e. point 3) whenever square A is on point
+       1, point 2+2 (point 4) whenever A is on point 2, and so on forever —
+       not a one-time coincidence at load, a permanent 2-stop offset. */
+    animation-delay: 0.35s, -4s, 0.5s;
   }
   @keyframes ooze-in { from { opacity: 0; transform: scale(0); border-radius: 50%; } to { opacity: 1; transform: scale(1); } }
 
-  /* Six stops, 60° apart, on a 9px-radius circle. The hold-then-jump comes
-     from `steps(1)` on the animation itself (see above) — a timing
-     function applies *within* each keyframe-to-keyframe segment, not once
-     across the whole cycle, so steps(1) per segment is what gives one
-     clean jump per stop; steps(N) here would wrongly subdivide every
-     segment into N micro-steps, compounding into N×stopCount jumps
-     instead of the stopCount this is actually going for. */
-  @keyframes snap-a {
-    0%       { translate: 9px 0px; }
-    16.6667% { translate: 4.5px 7.8px; }
-    33.3333% { translate: -4.5px 7.8px; }
-    50%      { translate: -9px 0px; }
-    66.6667% { translate: -4.5px -7.8px; }
-    83.3333% { translate: 4.5px -7.8px; }
-    100%     { translate: 9px 0px; }
-  }
-  /* Five stops, 72° apart, on an 11px-radius circle — a different stop
-     count from square A (not a shared divisor) is what keeps the two
-     squares' relative alignment from settling into a short repeating
-     pattern. */
-  @keyframes snap-b {
-    0%    { translate: 11px 0px; }
-    20%   { translate: 3.4px 10.5px; }
-    40%   { translate: -8.9px 6.5px; }
-    60%   { translate: -8.9px -6.5px; }
-    80%   { translate: 3.4px -10.5px; }
-    100%  { translate: 11px 0px; }
+  /* Four stops at the corners of a diamond (45/135/225/315°, radius 10px).
+     The hold-then-jump comes from `steps(1)` on the animation itself (see
+     above) — a timing function applies *within* each keyframe-to-keyframe
+     segment, not once across the whole cycle, so steps(1) per segment is
+     what gives one clean jump per stop; steps(4) here would wrongly
+     subdivide every segment into 4 micro-steps, compounding into 16 jumps
+     instead of the 4 this is actually going for. */
+  @keyframes snap-corners {
+    0%   { translate: 7.07px 7.07px; }   /* point 1 — bottom-right corner */
+    25%  { translate: -7.07px 7.07px; }  /* point 2 — bottom-left corner */
+    50%  { translate: -7.07px -7.07px; } /* point 3 — top-left corner */
+    75%  { translate: 7.07px -7.07px; }  /* point 4 — top-right corner */
+    100% { translate: 7.07px 7.07px; }   /* back to point 1 */
   }
   /* In-place liquid wobble only — scale + border-radius, no position, no
      rotation — layered on top of the stepped snap above via the separate
@@ -432,8 +424,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
-    .mark i.f { animation: none; opacity: 1; translate: 9px 0px; scale: 1; border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
-    .mark i.f:nth-of-type(2) { translate: -8.9px 6.5px; border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
+    .mark i.f { animation: none; opacity: 1; translate: 7.07px 7.07px; scale: 1; border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%; }
+    .mark i.f:nth-of-type(2) { translate: -7.07px -7.07px; border-radius: 34% 28% 32% 30% / 28% 34% 30% 32%; }
   }
 </style>
 </head>
