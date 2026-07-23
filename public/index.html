@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>caden</title>
+<title>CADEN</title>
 <!-- Overridden at runtime (see the Options tab's Remote Access section) when
      this exact file is loaded from somewhere other than the Pi itself (e.g.
      GitHub Pages) — every /api/... and /ws/... reference in this page is a
@@ -13,383 +13,373 @@
      directly by the Pi, so local use is completely unaffected. -->
 <base id="apiBase" href="/">
 <style>
-  /* ── caden · a small intelligence, living at home ─────────────────────
-     Deep water at night, with something alive glowing in it.
-     Gradients live ONLY in the background layer (the drifting blobs);
-     everything drawn on top — text, buttons, cards, the orb — is a solid
-     color. Big rounded lowercase display type carries the personality. */
+  /* ── CADEN · precision-engineered domestic intelligence ───────────────
+     Monochrome industrial system: pure black, pure white, hairline rules.
+     No gradients, no shadows, no color accents anywhere. The identity is
+     the node cluster — connected rounded squares that assemble on load —
+     and bold geometric type with tight tracking. Flat matte surfaces,
+     generous negative space, quiet confident layout. */
   :root {
-    --abyss:   #05070b;   /* page base under the gradient blobs */
-    --ink:     #e9ecef;   /* primary text, bone-white           */
-    --mut:     #8b93a0;   /* secondary text                     */
-    --dim:     #565d6b;   /* tertiary / hush                    */
-    --mint:    #8ee6c2;   /* the one accent — bioluminescence   */
-    --mint-dk: #0d332a;   /* solid mint-tinted fill (btn hover) */
-    --coral:   #ff7a70;   /* error / link lost                  */
-    --card:    rgba(233, 236, 239, 0.035);
-    --card-2:  rgba(233, 236, 239, 0.06);
-    --line:    rgba(233, 236, 239, 0.10);
-    --disp: ui-rounded, "SF Pro Rounded", "Varela Round", "Comfortaa", "Nunito",
-            "Arial Rounded MT Bold", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
-    --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --blk:   #000000;
+    --wht:   #ffffff;
+    --g60:   #9a9a9a;   /* secondary text            */
+    --g40:   #5c5c5c;   /* tertiary text             */
+    --g20:   #262626;   /* muted fills               */
+    --hair:  rgba(255, 255, 255, 0.16);   /* hairline dividers */
+    --hair2: rgba(255, 255, 255, 0.08);
+    --sans: "Helvetica Neue", "Inter", "Archivo", "Roboto", system-ui, -apple-system, sans-serif;
     --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, Menlo, monospace;
-    --r: 22px;            /* the house radius — everything is soft */
-    --spring: cubic-bezier(0.22, 1.4, 0.36, 1);
-    --t1: 0.18s;
+    /* machined radius scale — every corner is a deliberate, consistent
+       milled edge: one large, one medium, one small, nothing ad-hoc */
+    --r-lg: 18px;       /* panels, plates            */
+    --r-md: 11px;       /* buttons, inputs, bubbles  */
+    --r-sm: 5px;        /* modules, tags, indicators */
+    --sq: var(--r-sm);
+    --ease: cubic-bezier(0.6, 0, 0.2, 1);
+    --t1: 0.16s;
   }
 
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    font-family: var(--body);
-    color: var(--ink);
-    background: var(--abyss);
-    font-size: 14px;
+    font-family: var(--sans);
+    color: var(--wht);
+    background: var(--blk);
+    font-size: 13.5px;
     line-height: 1.55;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
   }
 
-  /* ── The only gradients on the page: three blurred blobs drifting on
-        coprime durations (37/53/71s) so the background never repeats a
-        composition — the water Caden lives in. ─────────────────────── */
-  .bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-  .bg i { position: absolute; border-radius: 50%; filter: blur(80px); will-change: transform; }
-  .bg i:nth-child(1) {
-    width: 62vmax; height: 62vmax; left: -18vmax; top: -22vmax;
-    background: radial-gradient(circle at 40% 40%, #0d2b33 0%, transparent 65%);
-    animation: drift-a 53s ease-in-out infinite alternate;
-  }
-  .bg i:nth-child(2) {
-    width: 55vmax; height: 55vmax; right: -20vmax; bottom: -18vmax;
-    background: radial-gradient(circle at 55% 55%, #241a3d 0%, transparent 65%);
-    animation: drift-b 71s ease-in-out infinite alternate;
-  }
-  .bg i:nth-child(3) {
-    width: 34vmax; height: 34vmax; left: 30vw; bottom: -14vmax;
-    background: radial-gradient(circle at 50% 50%, #0c2a24 0%, transparent 62%);
-    animation: drift-c 37s ease-in-out infinite alternate;
-  }
-  @keyframes drift-a { to { transform: translate(9vmax, 6vmax) scale(1.15); } }
-  @keyframes drift-b { to { transform: translate(-8vmax, -9vmax) scale(0.9); } }
-  @keyframes drift-c { to { transform: translate(-12vmax, -4vmax) scale(1.2); } }
+  /* faint structural verticals — the engineering-drawing field the UI sits on */
+  .bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .bg i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--hair2); }
+  .bg i:nth-child(1) { left: 25%; }
+  .bg i:nth-child(2) { left: 50%; }
+  .bg i:nth-child(3) { left: 75%; }
 
-  ::selection { background: rgba(142, 230, 194, 0.28); color: #fff; }
-  ::-webkit-scrollbar { width: 9px; height: 9px; }
-  ::-webkit-scrollbar-thumb { background: var(--card-2); border-radius: 99px; }
+  ::selection { background: var(--wht); color: var(--blk); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--g20); }
   ::-webkit-scrollbar-track { background: transparent; }
 
-  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; letter-spacing: inherit; }
   button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
-    outline: 2px solid var(--mint); outline-offset: 2px; border-radius: 6px;
+    outline: 1px solid var(--wht); outline-offset: 2px;
   }
-  /* the whole interface speaks lowercase — part of the rounded, liquid voice */
-  .up { text-transform: lowercase; }
+  .up { text-transform: uppercase; }
 
   /* ── Frame ──────────────────────────────────────────────────────────── */
   .app {
     position: fixed; inset: 0; z-index: 1;
     display: flex; flex-direction: column;
-    padding: 26px 30px 16px;
+    padding: 24px 32px 14px;
     max-width: 1560px; margin: 0 auto;
   }
 
-  /* staggered, asymmetric page entrance — nothing arrives in lockstep */
-  .header      { animation: rise 0.9s var(--spring) both; }
-  .sysline     { animation: rise 0.9s 0.14s var(--spring) both; }
-  .tabs        { animation: rise 0.9s 0.05s var(--spring) both; }
-  .col-left    { animation: rise 1.1s 0.22s var(--spring) both; }
-  .col-main    { animation: rise 1.0s 0.10s var(--spring) both; }
-  .footer      { animation: fadein 1.6s 0.5s ease both; }
-  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(0.985); } to { opacity: 1; transform: none; } }
-  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  /* load sequence — measured, sequential, machine-precise */
+  .header   { animation: reveal 0.6s 0.05s var(--ease) both; }
+  .sysline  { animation: reveal 0.6s 0.30s var(--ease) both; }
+  .tabs     { animation: reveal 0.6s 0.42s var(--ease) both; }
+  .col-left { animation: reveal 0.6s 0.55s var(--ease) both; }
+  .col-main { animation: reveal 0.6s 0.48s var(--ease) both; }
+  .footer   { animation: reveal 0.8s 0.85s var(--ease) both; }
+  @keyframes reveal { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-  /* ── Header: the wordmark and the orb ───────────────────────────────── */
-  .header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 14px; }
-  .brand { display: flex; align-items: center; gap: 18px; min-width: 0; }
+  /* ── The node mark — connected rounded squares assembling on load.
+        The brand IS this cluster: eight modules on a 4×4 grid that snap
+        into place one by one on a non-linear stagger, then idle with a
+        slow sequential pulse, like current moving through a circuit. ── */
+  .mark { display: grid; grid-template-columns: repeat(4, 13px); grid-template-rows: repeat(4, 13px); }
+  .mark i { border-radius: var(--sq); }
+  .mark i.f {
+    background: var(--wht);
+    animation: snap 0.4s var(--ease) both, node-idle 6s ease-in-out infinite;
+  }
+  /* checker-connected layout, corner-to-corner like a circuit trace */
+  .mark i.f:nth-of-type(1)  { grid-area: 1 / 1; animation-delay: 0.00s, 1.2s; }
+  .mark i.f:nth-of-type(2)  { grid-area: 1 / 3; animation-delay: 0.35s, 2.6s; }
+  .mark i.f:nth-of-type(3)  { grid-area: 2 / 2; animation-delay: 0.10s, 1.9s; }
+  .mark i.f:nth-of-type(4)  { grid-area: 2 / 4; animation-delay: 0.50s, 3.3s; }
+  .mark i.f:nth-of-type(5)  { grid-area: 3 / 1; animation-delay: 0.28s, 4.0s; }
+  .mark i.f:nth-of-type(6)  { grid-area: 3 / 3; animation-delay: 0.16s, 4.7s; }
+  .mark i.f:nth-of-type(7)  { grid-area: 4 / 2; animation-delay: 0.44s, 5.4s; }
+  .mark i.f:nth-of-type(8)  { grid-area: 4 / 4; animation-delay: 0.22s, 6.1s; }
+  @keyframes snap { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+  @keyframes node-idle { 0%, 100% { opacity: 1; } 6% { opacity: 0.35; } 12% { opacity: 1; } }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    padding-bottom: 18px; margin-bottom: 0; border-bottom: 1px solid var(--hair);
+  }
+  .brand { display: flex; align-items: center; gap: 20px; min-width: 0; }
   .logo {
-    font-family: var(--disp); font-weight: 800; font-size: 46px;
-    letter-spacing: -0.045em; line-height: 1; color: var(--ink);
-    text-transform: lowercase;
+    font-size: 34px; font-weight: 800; letter-spacing: 0.02em; line-height: 1;
+    text-transform: uppercase;
   }
   .subtitle {
-    font-family: var(--disp); font-weight: 700; font-size: 14px;
-    letter-spacing: -0.01em; color: var(--mut); align-self: flex-end; padding-bottom: 6px;
+    font-size: 10.5px; font-weight: 500; letter-spacing: 0.28em;
+    color: var(--g60); text-transform: uppercase;
+    border-left: 1px solid var(--hair); padding-left: 20px;
   }
 
-  /* status capsule (right side of header) */
-  .idbox {
-    display: flex; align-items: center; gap: 14px;
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 999px; padding: 10px 20px 10px 12px;
-    font-family: var(--disp); font-weight: 700; font-size: 13px;
-  }
-  .idbox .row { display: flex; align-items: center; gap: 7px; }
-  .idbox .k { color: var(--dim); text-transform: lowercase; }
-  .idbox .v { color: var(--ink); text-transform: lowercase; display: flex; align-items: center; gap: 8px; }
+  /* status readout, right side — instrument label, not a widget */
+  .idbox { display: flex; align-items: center; gap: 16px; font-size: 11px; letter-spacing: 0.18em; }
+  .idbox .row { display: flex; align-items: center; gap: 10px; }
+  .idbox .k { color: var(--g40); text-transform: uppercase; }
+  .idbox .v { color: var(--wht); text-transform: uppercase; display: flex; align-items: center; gap: 8px; font-family: var(--mono); }
 
-  /* ── The presence orb — Caden itself. A solid mint blob whose outline
-        morphs on two coprime cycles (11s + 7s) so its breathing never
-        loops visibly. It goes still and coral when the link drops.
-        #linkDot carries class "dot ok" / "dot down" from pollStatus(). ── */
-  .dot {
-    display: inline-block; width: 26px; height: 26px;
-    background: var(--dim);
-    border-radius: 46% 54% 57% 43% / 52% 46% 54% 48%;
-    transition: background var(--t1);
-    animation: morph 11s ease-in-out infinite, breathe 7s ease-in-out infinite;
-  }
-  .dot.ok   { background: var(--mint); box-shadow: 0 0 22px rgba(142, 230, 194, 0.45); }
-  .dot.down { background: var(--coral); box-shadow: 0 0 18px rgba(255, 122, 112, 0.4); animation: none; border-radius: 50%; }
-  @keyframes morph {
-    0%,100% { border-radius: 46% 54% 57% 43% / 52% 46% 54% 48%; }
-    25%     { border-radius: 58% 42% 44% 56% / 44% 58% 42% 56%; }
-    50%     { border-radius: 43% 57% 52% 48% / 57% 43% 51% 49%; }
-    75%     { border-radius: 55% 45% 58% 42% / 46% 54% 44% 56%; }
-  }
-  @keyframes breathe { 0%,100% { transform: scale(1); } 55% { transform: scale(1.14); } }
+  /* link status: a single module. Solid while linked, hollow + blinking when lost. */
+  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 4px; background: var(--g40); transition: background var(--t1); }
+  .dot.ok { background: var(--wht); }
+  .dot.down { background: transparent; border: 1px solid var(--wht); animation: lost 1s step-end infinite; }
+  @keyframes lost { 50% { opacity: 0.25; } }
 
   /* ── SYS status line ────────────────────────────────────────────────── */
-  .sysline { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-left: 4px; }
+  .sysline {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 0; border-bottom: 1px solid var(--hair);
+  }
   .sys-tag {
-    font-family: var(--disp); font-weight: 800; font-size: 12px;
-    color: var(--abyss); background: var(--mint);
-    padding: 3px 12px; border-radius: 999px; text-transform: lowercase;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+    background: var(--wht); color: var(--blk); padding: 3px 10px; border-radius: var(--r-sm);
   }
-  .sys-text { font-family: var(--mono); color: var(--mut); font-size: 12px; letter-spacing: 0.06em; text-transform: lowercase; }
+  .sys-text { font-family: var(--mono); color: var(--g60); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
 
-  /* ── Tabs — soft pills ──────────────────────────────────────────────── */
-  .tabs { display: flex; gap: 10px; margin-bottom: 16px; }
+  /* ── Tabs — flat, underlined, instrument-panel switches ─────────────── */
+  .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid var(--hair); }
   .tab {
-    display: flex; align-items: center; gap: 9px;
-    font-family: var(--disp); font-weight: 800; font-size: 15px; letter-spacing: -0.02em;
-    text-transform: lowercase;
-    background: var(--card); border: 1px solid var(--line); border-radius: 999px;
-    padding: 10px 24px; color: var(--mut);
-    transition: color var(--t1), background var(--t1), transform 0.35s var(--spring);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+    padding: 14px 26px 12px 0; margin-right: 26px; color: var(--g40);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color var(--t1), border-color var(--t1);
   }
-  .tab .sq { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); transition: background var(--t1); }
-  .tab:hover { color: var(--ink); transform: translateY(-2px); }
-  .tab.on { color: var(--abyss); background: var(--mint); border-color: var(--mint); }
-  .tab.on .sq { background: var(--abyss); }
+  .tab .sq { width: 8px; height: 8px; border-radius: 3px; background: var(--g20); transition: background var(--t1); }
+  .tab:hover { color: var(--g60); }
+  .tab.on { color: var(--wht); border-bottom-color: var(--wht); }
+  .tab.on .sq { background: var(--wht); }
 
   /* ── Body columns ───────────────────────────────────────────────────── */
-  .main { flex: 1; display: flex; gap: 18px; min-height: 0; }
-  .col-left { width: 292px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 18px; }
+  .main { flex: 1; display: flex; gap: 28px; min-height: 0; }
+  .col-left { width: 272px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 24px; }
   .col-main { flex: 1; min-width: 0; display: flex; }
 
   @media (max-width: 900px) {
     .col-left { display: none; }
-    .app { padding: 18px 14px 10px; }
-    .logo { font-size: 36px; }
+    .app { padding: 18px 16px 10px; }
+    .logo { font-size: 26px; }
     .subtitle { display: none; }
+    .bg { display: none; }
   }
 
-  /* ── Cards ──────────────────────────────────────────────────────────── */
-  .panel {
-    background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
-    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
-  }
+  /* ── Panels — flat fields separated by hairlines, not boxes ─────────── */
+  .panel { background: var(--blk); border: 1px solid var(--hair); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
   .panel-head {
-    font-family: var(--disp); font-weight: 800; font-size: 15px; letter-spacing: -0.02em;
-    text-transform: lowercase; color: var(--ink);
-    padding: 14px 20px 10px; display: flex; align-items: center; justify-content: space-between;
-    flex: 0 0 auto;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--wht); padding: 12px 18px; border-bottom: 1px solid var(--hair);
+    display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto;
   }
-  .panel-head .meta { font-weight: 700; font-size: 12px; color: var(--dim); }
-  .panel-body { padding: 4px 20px 16px; flex: 1; min-height: 0; }
+  .panel-head .meta { font-weight: 500; font-size: 10px; letter-spacing: 0.18em; color: var(--g40); }
+  .panel-body { padding: 14px 18px 16px; flex: 1; min-height: 0; }
 
-  /* key-pool meter */
-  .seg { display: flex; gap: 4px; margin: 8px 0 10px; }
-  .seg i { flex: 1; height: 8px; border-radius: 99px; background: var(--card-2); }
-  .seg i.fill { background: var(--mint); }
-  .kv { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12.5px; }
-  .kv .k { color: var(--dim); font-family: var(--disp); font-weight: 700; text-transform: lowercase; }
-  .kv .v { color: var(--ink); font-family: var(--mono); font-size: 12px; text-transform: lowercase; }
-  .subline { font-family: var(--disp); font-weight: 700; font-size: 12px; color: var(--dim); text-transform: lowercase; margin-top: 2px; }
+  /* key-pool meter — square modules, filled left to right */
+  .seg { display: flex; gap: 3px; margin: 8px 0 12px; }
+  .seg i { flex: 1; height: 9px; border-radius: 4px; background: var(--g20); }
+  .seg i.fill { background: var(--wht); }
+  .kv { display: flex; justify-content: space-between; padding: 5px 0; font-size: 11px; letter-spacing: 0.1em; border-bottom: 1px solid var(--hair2); }
+  .kv:last-child { border-bottom: none; }
+  .kv .k { color: var(--g40); text-transform: uppercase; }
+  .kv .v { color: var(--wht); font-family: var(--mono); font-size: 11px; text-transform: uppercase; }
+  .subline { font-size: 10px; color: var(--g40); letter-spacing: 0.2em; text-transform: uppercase; margin-top: 2px; }
 
-  .session-row { display: flex; gap: 8px; padding-top: 8px; }
+  .session-row { display: flex; gap: 8px; padding-top: 4px; }
   select.sel {
     flex: 1; appearance: none; -webkit-appearance: none;
-    font-family: var(--disp); font-weight: 700; font-size: 13px; text-transform: lowercase;
-    color: var(--ink); background-color: var(--card-2);
-    border: 1px solid var(--line); border-radius: 999px; padding: 8px 30px 8px 16px; cursor: pointer;
-    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%238ee6c2' stroke-width='1.4'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 13px center;
+    font-family: var(--sans); font-weight: 700; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--wht); background-color: var(--blk);
+    border: 1px solid var(--hair); border-radius: var(--r-md); padding: 8px 28px 8px 12px; cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%23ffffff' stroke-width='1.2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
   }
-  select.sel option { background: #10141c; color: var(--ink); }
+  select.sel option { background: var(--blk); color: var(--wht); }
 
   .btn {
-    font-family: var(--disp); font-weight: 700; font-size: 13px; text-transform: lowercase;
-    color: var(--ink); background: var(--card-2);
-    border: 1px solid var(--line); border-radius: 999px; padding: 8px 18px;
-    transition: background var(--t1), color var(--t1), transform 0.35s var(--spring);
+    font-family: var(--sans); font-weight: 700; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--wht); background: var(--blk);
+    border: 1px solid var(--hair); border-radius: var(--r-md); padding: 8px 16px;
+    transition: background var(--t1), color var(--t1), border-color var(--t1);
   }
-  .btn:hover { background: var(--mint-dk); transform: translateY(-1px); }
-  .btn-amber { background: var(--mint); color: var(--abyss); border-color: var(--mint); font-weight: 800; }
-  .btn-amber:hover { background: #a5efd0; }
-  .btn-cancel { border-color: rgba(255, 122, 112, 0.5); color: var(--coral); }
-  .btn-cancel:hover { background: var(--coral); color: var(--abyss); }
-  .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+  .btn:hover { background: var(--wht); color: var(--blk); border-color: var(--wht); }
+  .btn-amber { background: var(--wht); color: var(--blk); border-color: var(--wht); }
+  .btn-amber:hover { background: var(--g60); border-color: var(--g60); }
+  .btn-cancel { border-color: var(--g40); color: var(--g60); }
+  .btn-cancel:hover { background: var(--wht); color: var(--blk); border-color: var(--wht); }
+  .btn:disabled { opacity: 0.3; cursor: default; }
+  .btn:disabled:hover { background: var(--blk); color: var(--wht); border-color: var(--hair); }
 
-  /* the little plaque under telemetry */
+  /* nameplate — engraved spec label */
   .modelbox {
-    background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
-    padding: 16px 20px; font-family: var(--disp); font-weight: 700;
-    font-size: 12.5px; color: var(--dim); line-height: 1.9; text-transform: lowercase;
+    border: 1px solid var(--hair); border-radius: var(--r-lg);
+    padding: 14px 18px; font-family: var(--mono);
+    font-size: 10px; color: var(--g40); line-height: 2; letter-spacing: 0.16em; text-transform: uppercase;
   }
 
   /* ── Views (chat / system / options) ────────────────────────────────── */
   .view { flex: 1; min-width: 0; }
   .view.hidden { display: none; }
 
-  .conv-scroll { flex: 1; overflow-y: auto; padding: 14px 22px; min-height: 0; }
-  .conv-inner { max-width: 840px; }
+  .conv-scroll { flex: 1; overflow-y: auto; padding: 20px 22px; min-height: 0; }
+  .conv-inner { max-width: 820px; }
 
-  .conv-empty { color: var(--dim); font-family: var(--disp); font-weight: 700; font-size: 14px; padding: 9vh 0 0; text-align: center; }
+  .conv-empty { color: var(--g40); font-size: 10.5px; letter-spacing: 0.28em; padding: 10vh 0 0; text-align: center; text-transform: uppercase; }
   .conv-empty .big {
-    display: block; color: var(--ink); font-family: var(--disp); font-weight: 800;
-    font-size: 40px; letter-spacing: -0.04em; margin-bottom: 10px; text-transform: lowercase;
+    display: block; color: var(--wht); font-weight: 800;
+    font-size: 30px; letter-spacing: 0.06em; margin-bottom: 14px;
   }
 
-  /* messages bloom in on a springy overshoot — each one a small event */
-  .turn { margin-bottom: 22px; animation: bloom 0.7s var(--spring) both; }
-  @keyframes bloom { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: none; } }
-  .turn-label { font-family: var(--disp); font-weight: 800; font-size: 12px; letter-spacing: -0.01em; text-transform: lowercase; margin-bottom: 6px; }
-  .turn-user .turn-label { color: var(--dim); }
-  .turn-caden .turn-label { color: var(--mint); }
-  .turn-caden.error .turn-label { color: var(--coral); }
-  .turn-body { white-space: pre-wrap; overflow-wrap: break-word; font-size: 14.5px; }
+  /* messages register like log entries — a quick precise slide */
+  .turn { margin-bottom: 26px; animation: register 0.4s var(--ease) both; }
+  @keyframes register { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .turn-label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; margin-bottom: 7px;
+  }
+  .turn-label::before { content: ""; width: 8px; height: 8px; border-radius: 3px; }
+  .turn-user .turn-label { color: var(--g40); }
+  .turn-user .turn-label::before { background: var(--g40); }
+  .turn-caden .turn-label { color: var(--wht); }
+  .turn-caden .turn-label::before { background: var(--wht); }
+  .turn-caden.error .turn-label::before { background: transparent; border: 1px solid var(--wht); }
+  .turn-body { white-space: pre-wrap; overflow-wrap: break-word; font-size: 14px; }
   .turn-user .turn-body {
-    color: var(--ink); background: var(--card-2); border: 1px solid var(--line);
-    border-radius: var(--r); border-top-left-radius: 6px; padding: 12px 18px; display: inline-block; max-width: 100%;
+    color: var(--g60); border: 1px solid var(--hair); border-radius: var(--r-md);
+    padding: 11px 16px; display: inline-block; max-width: 100%;
   }
-  .turn-caden .turn-body { color: var(--ink); }
-  .turn-body a { color: var(--mint); }
-  .turn-meta { margin-top: 8px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--dim); text-transform: lowercase; }
+  .turn-caden .turn-body { color: var(--wht); padding-left: 16px; border-left: 1px solid var(--hair); }
+  .turn-body a { color: var(--wht); text-decoration-color: var(--g40); }
+  .turn-meta { margin-top: 8px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; color: var(--g40); text-transform: uppercase; }
   .turn-images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .turn-images img { max-width: 220px; max-height: 220px; border-radius: 14px; border: 1px solid var(--line); }
+  .turn-images img { max-width: 220px; max-height: 220px; border-radius: var(--r-md); border: 1px solid var(--hair); }
 
-  .caret { display: inline-block; width: 9px; height: 16px; margin-left: 2px; background: var(--mint); border-radius: 3px; vertical-align: -3px; animation: blink 1s step-end infinite; }
+  .caret { display: inline-block; width: 9px; height: 15px; margin-left: 3px; background: var(--wht); border-radius: 3px; vertical-align: -2px; animation: blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
-  .dots { display: inline-flex; gap: 6px; padding: 4px 0; }
-  .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); animation: dp 1.1s ease-in-out infinite; }
+  /* thinking: three modules cycling — the mark's idle pulse, miniaturized */
+  .dots { display: inline-flex; gap: 5px; padding: 4px 0; }
+  .dots i { width: 8px; height: 8px; border-radius: 3px; background: var(--wht); animation: dp 1.1s ease-in-out infinite; }
   .dots i:nth-child(2){animation-delay:.15s} .dots i:nth-child(3){animation-delay:.3s}
-  @keyframes dp { 0%,60%,100%{opacity:.2; transform: scale(0.8)} 30%{opacity:1; transform: scale(1)} }
+  @keyframes dp { 0%,60%,100%{opacity:.15} 30%{opacity:1} }
 
-  /* trace / thinking capsule */
+  /* trace / tool-call capsule */
   .trace { margin-bottom: 10px; }
   .trace summary {
-    list-style: none; cursor: pointer; font-family: var(--disp); font-weight: 700;
-    font-size: 11.5px; text-transform: lowercase; color: var(--dim); padding: 2px 0;
+    list-style: none; cursor: pointer; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--g40); padding: 2px 0;
   }
   .trace summary::-webkit-details-marker { display: none; }
-  .trace summary::before { content: "◦ "; color: var(--mint); }
-  .trace[open] summary::before { content: "● "; }
-  .trace.live summary { color: var(--mint); }
-  .trace-body { margin-top: 6px; padding: 8px 14px; background: var(--card); border-radius: 14px; font-family: var(--mono); font-size: 11px; color: var(--mut); }
+  .trace summary::before { content: "▪ "; color: var(--g60); }
+  .trace[open] summary::before { content: "▪ "; color: var(--wht); }
+  .trace.live summary { color: var(--wht); }
+  .trace-body { margin-top: 6px; padding: 8px 14px; border-left: 1px solid var(--hair); font-family: var(--mono); font-size: 11px; color: var(--g60); }
   .trace-line { white-space: pre-wrap; padding: 1px 0; }
-  .trace-line b { color: var(--mint); font-weight: 600; }
-  .trace-line span { color: var(--dim); }
+  .trace-line b { color: var(--wht); font-weight: 600; }
+  .trace-line span { color: var(--g40); }
 
   /* attachment preview strip */
   .attach-row { display: none; flex-wrap: wrap; gap: 8px; padding: 10px 20px 0; flex: 0 0 auto; }
-  .attach-thumb { position: relative; width: 56px; height: 56px; border-radius: 12px; border: 1px solid var(--line); overflow: hidden; }
+  .attach-thumb { position: relative; width: 56px; height: 56px; border-radius: var(--r-md); border: 1px solid var(--hair); overflow: hidden; }
   .attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .attach-remove {
-    position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; line-height: 16px;
-    background: var(--coral); color: var(--abyss); border-radius: 50%; font-size: 12px; font-weight: 700; padding: 0;
+    position: absolute; top: 0; right: 0; width: 18px; height: 18px; line-height: 16px;
+    background: var(--wht); color: var(--blk); font-size: 12px; font-weight: 700; padding: 0; border-radius: 0 0 0 var(--r-sm);
   }
 
-  /* input row */
+  /* input row — a flat console slot */
   .input-row {
     display: flex; align-items: flex-end; gap: 10px;
-    margin: 12px 16px 16px; padding: 8px 8px 8px 20px; flex: 0 0 auto;
-    background: var(--card-2); border: 1px solid var(--line); border-radius: 999px;
-    transition: border-color var(--t1);
+    border-top: 1px solid var(--hair); padding: 14px 18px; flex: 0 0 auto;
   }
-  .input-row:focus-within { border-color: var(--mint); }
-  .input-caret { display: none; }
+  .input-caret { color: var(--wht); font-weight: 700; padding-bottom: 8px; font-family: var(--mono); }
   .input-field {
-    flex: 1; resize: none; background: none; border: none; color: var(--ink);
-    font-family: var(--body); font-size: 14.5px; line-height: 1.5; max-height: 140px; padding: 8px 2px;
+    flex: 1; resize: none; background: none; border: none; color: var(--wht);
+    font-family: var(--sans); font-size: 14px; line-height: 1.5; max-height: 140px; padding: 8px 2px;
   }
-  .input-field::placeholder { color: var(--dim); font-family: var(--disp); font-weight: 700; text-transform: lowercase; }
+  .input-field::placeholder { color: var(--g40); letter-spacing: 0.14em; text-transform: uppercase; font-size: 11px; font-weight: 700; }
   .input-field:focus-visible { outline: none; }
 
   /* system log */
-  .log-scroll { flex: 1; overflow-y: auto; padding: 8px 20px 14px; font-family: var(--mono); font-size: 11.5px; min-height: 0; }
-  .log-line { padding: 7px 0; border-bottom: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; color: var(--mut); }
+  .log-scroll { flex: 1; overflow-y: auto; padding: 10px 18px 14px; font-family: var(--mono); font-size: 11px; min-height: 0; }
+  .log-line { padding: 7px 0; border-bottom: 1px solid var(--hair2); white-space: pre-wrap; word-break: break-word; color: var(--g60); }
   .log-line .tag {
-    display: inline-block; font-family: var(--disp); font-weight: 700; font-size: 10px;
-    text-transform: lowercase; padding: 1px 9px; margin-right: 8px;
-    border-radius: 999px; background: var(--card-2); color: var(--dim);
+    display: inline-block; font-family: var(--sans); font-weight: 700; font-size: 9px;
+    letter-spacing: 0.16em; text-transform: uppercase; padding: 1px 8px; margin-right: 10px;
+    border: 1px solid var(--hair); border-radius: var(--r-sm); color: var(--g40);
   }
-  .log-line.ok .tag { color: var(--abyss); background: var(--mint); }
-  .log-line.error .tag { color: var(--abyss); background: var(--coral); }
-  .log-line.running .tag { color: var(--mint); background: var(--mint-dk); }
-  .log-line.warn .tag { color: var(--coral); background: rgba(255, 122, 112, 0.14); }
-  .log-line .cmd { color: var(--ink); }
-  .log-empty { color: var(--dim); font-family: var(--disp); font-weight: 700; font-size: 13px; text-align: center; padding: 40px 10px; text-transform: lowercase; }
+  .log-line.ok .tag { background: var(--wht); color: var(--blk); border-color: var(--wht); }
+  .log-line.error .tag { background: transparent; color: var(--wht); border-color: var(--wht); }
+  .log-line.running .tag { color: var(--wht); border-color: var(--g60); }
+  .log-line.warn .tag { color: var(--wht); border-color: var(--g60); }
+  .log-line .cmd { color: var(--wht); }
+  .log-empty { color: var(--g40); font-size: 10.5px; letter-spacing: 0.24em; text-align: center; padding: 40px 10px; text-transform: uppercase; }
   .log-copy-btn {
-    font-family: var(--disp); font-weight: 700; font-size: 12px; text-transform: lowercase;
-    background: var(--card-2); color: var(--mut); border: 1px solid var(--line);
-    border-radius: 999px; padding: 3px 14px; cursor: pointer;
+    font-family: var(--sans); font-weight: 700; font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    background: transparent; color: var(--g60); border: 1px solid var(--hair);
+    border-radius: var(--r-md); padding: 3px 12px; cursor: pointer;
   }
-  .log-copy-btn:hover { color: var(--ink); background: var(--mint-dk); }
+  .log-copy-btn:hover { background: var(--wht); color: var(--blk); border-color: var(--wht); }
 
   /* options / debug panel */
-  .options-scroll { flex: 1; overflow-y: auto; padding: 6px 20px 20px; min-height: 0; }
-  .opt-section { max-width: 640px; margin: 0 auto 24px; }
+  .options-scroll { flex: 1; overflow-y: auto; padding: 10px 18px 20px; min-height: 0; }
+  .opt-section { max-width: 640px; margin: 0 auto 26px; }
   .opt-section:last-child { margin-bottom: 0; }
   .opt-title {
-    font-family: var(--disp); font-weight: 800; font-size: 15px; letter-spacing: -0.02em;
-    text-transform: lowercase; color: var(--ink);
-    margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--wht); margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--hair);
   }
-  .opt-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; font-size: 13px; }
-  .opt-row .k { color: var(--mut); font-family: var(--disp); font-weight: 700; text-transform: lowercase; }
-  .opt-row .k small { display: block; color: var(--dim); font-family: var(--body); font-weight: 400; font-size: 11px; text-transform: none; margin-top: 2px; }
+  .opt-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 0; font-size: 12px; }
+  .opt-row .k { color: var(--g60); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: 11px; }
+  .opt-row .k small { display: block; color: var(--g40); font-weight: 400; font-size: 10.5px; letter-spacing: 0.02em; text-transform: none; margin-top: 2px; }
   .opt-row .ctl { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
-  .opt-row .ctl .btn, .opt-row .ctl .sel { font-size: 12px; padding: 6px 14px; }
+  .opt-row .ctl .btn, .opt-row .ctl .sel { font-size: 10px; padding: 6px 12px; }
   .opt-row .ctl select.sel { width: auto; flex: 0 0 auto; }
   .opt-input {
-    font-family: var(--mono); font-size: 11.5px;
-    color: var(--ink); background: var(--card-2);
-    border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; width: 200px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--wht); background: var(--blk);
+    border: 1px solid var(--hair); border-radius: var(--r-md); padding: 7px 12px; width: 200px;
   }
-  .opt-input::placeholder { color: var(--dim); }
-  .opt-note { color: var(--dim); font-size: 12px; margin-top: 6px; }
+  .opt-input::placeholder { color: var(--g40); }
+  .opt-note { color: var(--g40); font-size: 11.5px; margin-top: 6px; }
   .opt-pre {
-    background: var(--card); border: 1px solid var(--line); border-radius: 14px; color: var(--mut);
-    font-family: var(--mono); font-size: 10.5px; padding: 12px; margin-top: 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+    background: var(--blk); border: 1px solid var(--hair); border-radius: var(--r-md); color: var(--g60);
+    font-family: var(--mono); font-size: 10px; padding: 12px; margin-top: 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
   }
 
   /* ── Footer ─────────────────────────────────────────────────────────── */
   .footer {
-    margin-top: 14px; padding: 8px 4px 0;
-    font-family: var(--disp); font-weight: 700; font-size: 11.5px;
-    color: var(--dim); text-transform: lowercase;
+    margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--hair);
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.26em;
+    color: var(--g40); text-transform: uppercase;
+    display: flex; justify-content: space-between;
   }
 
   /* reminder toast */
-  .toast-stack { position: fixed; top: 24px; right: 28px; z-index: 200; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+  .toast-stack { position: fixed; top: 24px; right: 32px; z-index: 200; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
   .toast {
-    background: #10151d; border: 1px solid var(--mint); border-radius: 18px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-    padding: 14px 18px; max-width: 320px; animation: toast-in 0.5s var(--spring);
+    background: var(--blk); border: 1px solid var(--wht); border-radius: var(--r-lg);
+    padding: 14px 18px; max-width: 320px; animation: toast-in 0.35s var(--ease);
   }
-  .toast .toast-tag { color: var(--mint); font-family: var(--disp); font-weight: 800; font-size: 12px; text-transform: lowercase; margin-bottom: 4px; }
-  .toast .toast-body { color: var(--ink); font-size: 13px; }
-  .toast.leaving { animation: toast-out 0.35s ease-in forwards; }
-  @keyframes toast-in { from { opacity: 0; transform: translateX(20px) scale(0.95); } to { opacity: 1; transform: none; } }
-  @keyframes toast-out { to { opacity: 0; transform: translateX(16px); } }
+  .toast .toast-tag { color: var(--wht); font-weight: 700; font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; margin-bottom: 5px; }
+  .toast .toast-body { color: var(--g60); font-size: 12.5px; }
+  .toast.leaving { animation: toast-out 0.3s ease-in forwards; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  @keyframes toast-out { to { opacity: 0; transform: translateY(-8px); } }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
-    .dot { animation: none; }
-    .bg i { animation: none; }
+    .mark i.f { animation: none; opacity: 1; transform: none; }
   }
 </style>
 </head>
@@ -400,60 +390,65 @@
 <div class="app">
   <header class="header">
     <div class="brand">
-      <div class="logo">caden</div>
-      <div class="subtitle up">a small intelligence, living at home</div>
+      <div class="mark" aria-hidden="true">
+        <i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i>
+        <i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i>
+      </div>
+      <div class="logo">Caden</div>
+      <div class="subtitle up">Domestic Agent System</div>
     </div>
     <div class="idbox">
-      <div class="row"><span class="k">link</span><span class="v"><span class="dot" id="linkDot"></span><span id="linkText">…</span></span></div>
+      <div class="row"><span class="k">Unit</span><span class="v">C-01</span></div>
+      <div class="row"><span class="k">Link</span><span class="v"><span class="dot" id="linkDot"></span><span id="linkText">…</span></span></div>
     </div>
   </header>
 
   <div class="sysline">
-    <span class="sys-tag">sys</span>
+    <span class="sys-tag">Sys</span>
     <span class="sys-text up" id="sysText">BOOTING // STAND BY</span>
   </div>
 
   <nav class="tabs">
-    <button class="tab on" id="tabChat"><span class="sq"></span>chat</button>
-    <button class="tab" id="tabSystem"><span class="sq"></span>system</button>
-    <button class="tab" id="tabOptions"><span class="sq"></span>options</button>
+    <button class="tab on" id="tabChat"><span class="sq"></span>Chat</button>
+    <button class="tab" id="tabSystem"><span class="sq"></span>System</button>
+    <button class="tab" id="tabOptions"><span class="sq"></span>Options</button>
   </nav>
 
   <section class="main">
     <div class="col-left">
       <div class="panel">
-        <div class="panel-head">session</div>
+        <div class="panel-head">Session</div>
         <div class="panel-body">
           <div class="session-row">
             <select class="sel" id="agentSelect" aria-label="Persona">
-              <option value="caden">caden</option>
-              <option value="researcher">research</option>
-              <option value="scout">scout</option>
+              <option value="caden">Caden</option>
+              <option value="researcher">Research</option>
+              <option value="scout">Scout</option>
             </select>
-            <button class="btn" id="newBtn">new</button>
+            <button class="btn" id="newBtn">New</button>
           </div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head">telemetry</div>
+        <div class="panel-head">Telemetry</div>
         <div class="panel-body">
-          <div class="subline up">key pool · groq</div>
+          <div class="subline up">Key Pool · Groq</div>
           <div class="seg" id="keySeg"></div>
-          <div class="kv"><span class="k">mainframe</span><span class="v" id="tMainframe">—</span></div>
-          <div class="kv"><span class="k">sw rev</span><span class="v" id="tSha">—</span></div>
-          <div class="kv"><span class="k">uptime</span><span class="v" id="tUptime">—</span></div>
-          <div class="kv"><span class="k">groq</span><span class="v" id="tGroq">—</span></div>
-          <div class="kv"><span class="k">gemini</span><span class="v" id="tGemini">—</span></div>
-          <div class="kv"><span class="k">browser</span><span class="v" id="tBrowser">—</span></div>
-          <div class="kv"><span class="k">clock</span><span class="v" id="tClock">—</span></div>
+          <div class="kv"><span class="k">Mainframe</span><span class="v" id="tMainframe">—</span></div>
+          <div class="kv"><span class="k">SW Rev</span><span class="v" id="tSha">—</span></div>
+          <div class="kv"><span class="k">Uptime</span><span class="v" id="tUptime">—</span></div>
+          <div class="kv"><span class="k">Groq</span><span class="v" id="tGroq">—</span></div>
+          <div class="kv"><span class="k">Gemini</span><span class="v" id="tGemini">—</span></div>
+          <div class="kv"><span class="k">Browser</span><span class="v" id="tBrowser">—</span></div>
+          <div class="kv"><span class="k">Clock</span><span class="v" id="tClock">—</span></div>
         </div>
       </div>
 
       <div class="modelbox">
-        model caden-1<br>
-        ser no 000451<br>
-        made for the home<br>
+        Model Caden-1<br>
+        Ser No 000451<br>
+        Made for the home<br>
         of tomorrow
       </div>
     </div>
@@ -461,86 +456,86 @@
     <div class="col-main">
       <!-- CHAT -->
       <div class="panel view" id="viewChat">
-        <div class="panel-head">conversation <span class="meta up" id="convMeta">Caden</span></div>
+        <div class="panel-head">Conversation <span class="meta up" id="convMeta">Caden</span></div>
         <div class="conv-scroll" id="chatScroll">
           <div class="conv-inner" id="chatInner">
-            <div class="conv-empty up" id="chatEmpty"><span class="big">hello.</span>i'm here — say something</div>
+            <div class="conv-empty up" id="chatEmpty"><span class="big">CADEN</span>Online // Awaiting Input</div>
           </div>
         </div>
         <div class="attach-row" id="attachRow"></div>
         <div class="input-row">
           <span class="input-caret">&gt;</span>
-          <textarea class="input-field" id="inputField" placeholder="talk to caden" rows="1"></textarea>
+          <textarea class="input-field" id="inputField" placeholder="Type a message" rows="1"></textarea>
           <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
-          <button class="btn" id="attachBtn" title="Attach an image">attach</button>
-          <button class="btn btn-cancel" id="cancelBtn" title="Stop retrying and cancel this request" style="display:none">cancel</button>
-          <button class="btn btn-amber" id="sendBtn">send</button>
+          <button class="btn" id="attachBtn" title="Attach an image">Attach</button>
+          <button class="btn btn-cancel" id="cancelBtn" title="Stop retrying and cancel this request" style="display:none">Cancel</button>
+          <button class="btn btn-amber" id="sendBtn">Send</button>
         </div>
       </div>
 
       <!-- SYSTEM -->
       <div class="panel view hidden" id="viewSystem">
         <div class="panel-head">
-          <span>system log <span class="meta up">all activity</span></span>
-          <button class="log-copy-btn up" id="logCopyBtn" type="button">copy</button>
+          <span>System Log <span class="meta up">All Activity</span></span>
+          <button class="log-copy-btn up" id="logCopyBtn" type="button">Copy</button>
         </div>
         <div class="log-scroll" id="logBody">
-          <div class="log-empty up" id="logEmpty">no activity yet</div>
+          <div class="log-empty up" id="logEmpty">No activity yet</div>
         </div>
       </div>
 
       <!-- OPTIONS -->
       <div class="panel view hidden" id="viewOptions">
-        <div class="panel-head">options <span class="meta up">configuration &amp; debug</span></div>
+        <div class="panel-head">Options <span class="meta up">Configuration &amp; Debug</span></div>
         <div class="options-scroll">
           <div class="opt-section">
-            <div class="opt-title up">audio</div>
+            <div class="opt-title up">Audio</div>
             <div class="opt-row">
-              <span class="k">status sfx</span>
+              <span class="k">Status SFX</span>
               <span class="ctl"><button class="btn" id="optSfxBtn">On</button></span>
             </div>
             <div class="opt-row">
-              <span class="k">voice (gemini tts)<small>Reads Caden's replies aloud</small></span>
+              <span class="k">Voice (Gemini TTS)<small>Reads Caden's replies aloud</small></span>
               <span class="ctl"><button class="btn" id="optTtsBtn">On</button></span>
             </div>
             <div class="opt-row">
-              <span class="k">test a sound<small>Plays locally right now, no chat turn needed</small></span>
+              <span class="k">Test a sound<small>Plays locally right now, no chat turn needed</small></span>
               <span class="ctl">
-                <button class="btn" data-sfx-test="sent">sent</button>
-                <button class="btn" data-sfx-test="thinking">thinking</button>
-                <button class="btn" data-sfx-test="success">success</button>
-                <button class="btn" data-sfx-test="error">error</button>
-                <button class="btn" data-sfx-test="reminder">reminder</button>
-                <button class="btn" data-sfx-test="startup">startup</button>
+                <button class="btn" data-sfx-test="sent">Sent</button>
+                <button class="btn" data-sfx-test="thinking">Thinking</button>
+                <button class="btn" data-sfx-test="success">Success</button>
+                <button class="btn" data-sfx-test="error">Error</button>
+                <button class="btn" data-sfx-test="reminder">Reminder</button>
+                <button class="btn" data-sfx-test="startup">Startup</button>
               </span>
             </div>
             <div class="opt-row">
-              <span class="k">pi/browser sync<small id="optSfxTiming">—</small></span>
+              <span class="k">Pi/browser sync<small id="optSfxTiming">—</small></span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">browser</div>
+            <div class="opt-title up">Browser</div>
             <div class="opt-row">
-              <span class="k">mode override<small>Takes effect on next launch — use Restart to force it now</small></span>
+              <span class="k">Mode override<small>Takes effect on next launch — use Restart to force it now</small></span>
               <span class="ctl">
                 <select class="sel" id="optBrowserMode">
-                  <option value="auto">auto</option>
-                  <option value="local">local</option>
-                  <option value="stream">stream</option>
+                  <option value="auto">Auto</option>
+                  <option value="local">Local</option>
+                  <option value="stream">Stream</option>
                 </select>
               </span>
             </div>
             <div class="opt-row">
-              <span class="k">restart browser<small>Closes the current instance; relaunches on next use</small></span>
-              <span class="ctl"><button class="btn" id="optBrowserRestart">restart</button></span>
+              <span class="k">Restart browser<small>Closes the current instance; relaunches on next use</small></span>
+              <span class="ctl"><button class="btn" id="optBrowserRestart">Restart</button></span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">self-update</div>
+            <div class="opt-title up">Self-Update</div>
             <div class="opt-row">
-              <span class="k">poll interval</span>
+              <span class="k">Poll interval</span>
               <span class="ctl">
                 <select class="sel" id="optUpdateInterval">
                   <option value="30000">30s</option>
@@ -552,85 +547,85 @@
               </span>
             </div>
             <div class="opt-row">
-              <span class="k">check now<small id="optUpdateMeta">—</small></span>
+              <span class="k">Check now<small id="optUpdateMeta">—</small></span>
               <span class="ctl"><button class="btn" id="optCheckNow">Check Now</button></span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">memory</div>
+            <div class="opt-title up">Memory</div>
             <div class="opt-row">
-              <span class="k">what caden remembers<small id="optMemorySummary">—</small></span>
-              <span class="ctl"><button class="btn" id="optForget">forget me</button></span>
+              <span class="k">What Caden remembers<small id="optMemorySummary">—</small></span>
+              <span class="ctl"><button class="btn" id="optForget">Forget Me</button></span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">reminders</div>
+            <div class="opt-title up">Reminders</div>
             <div class="opt-row">
-              <span class="k">pending<small>Set with "remind me..." in chat — surfaces here, as a live toast, and next time you talk</small></span>
+              <span class="k">Pending<small>Set with "remind me..." in chat — surfaces here, as a live toast, and next time you talk</small></span>
             </div>
             <div id="optReminderList" class="opt-note">No pending reminders</div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">telegram</div>
+            <div class="opt-title up">Telegram</div>
             <div class="opt-row">
-              <span class="k">status<small>Reachable from outside the house once a token and at least one allowed chat id are set — see CLAUDE.md for getting your chat id</small></span>
+              <span class="k">Status<small>Reachable from outside the house once a token and at least one allowed chat id are set — see CLAUDE.md for getting your chat id</small></span>
             </div>
             <div id="optTelegramStatus" class="opt-note">—</div>
             <div class="opt-row">
-              <span class="k">bot token<small>From @BotFather — never shown back once saved</small></span>
+              <span class="k">Bot token<small>From @BotFather — never shown back once saved</small></span>
               <span class="ctl">
                 <input type="password" id="optTelegramToken" class="opt-input" placeholder="123456789:AA..." autocomplete="off" spellcheck="false">
-                <button class="btn" id="optTelegramSaveToken">save</button>
-                <button class="btn btn-cancel" id="optTelegramClearToken">clear</button>
+                <button class="btn" id="optTelegramSaveToken">Save</button>
+                <button class="btn btn-cancel" id="optTelegramClearToken">Clear</button>
               </span>
             </div>
             <div class="opt-row">
-              <span class="k">allowed chat ids<small>Comma-separated — anyone else is ignored and logged to System Log</small></span>
+              <span class="k">Allowed chat IDs<small>Comma-separated — anyone else is ignored and logged to System Log</small></span>
               <span class="ctl">
                 <input type="text" id="optTelegramChatIds" class="opt-input" placeholder="123456789, 987654321" autocomplete="off" spellcheck="false">
-                <button class="btn" id="optTelegramSaveIds">save</button>
+                <button class="btn" id="optTelegramSaveIds">Save</button>
               </span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">weather</div>
+            <div class="opt-title up">Weather</div>
             <div class="opt-row">
-              <span class="k">status<small>Without a key, get_weather still works via wttr.in — a key just upgrades the source</small></span>
+              <span class="k">Status<small>Without a key, get_weather still works via wttr.in — a key just upgrades the source</small></span>
             </div>
             <div id="optWeatherStatus" class="opt-note">—</div>
             <div class="opt-row">
-              <span class="k">openweathermap api key<small>Free at openweathermap.org/api — never shown back once saved</small></span>
+              <span class="k">OpenWeatherMap API key<small>Free at openweathermap.org/api — never shown back once saved</small></span>
               <span class="ctl">
                 <input type="password" id="optWeatherKey" class="opt-input" placeholder="API key" autocomplete="off" spellcheck="false">
-                <button class="btn" id="optWeatherSaveKey">save</button>
-                <button class="btn btn-cancel" id="optWeatherClearKey">clear</button>
+                <button class="btn" id="optWeatherSaveKey">Save</button>
+                <button class="btn btn-cancel" id="optWeatherClearKey">Clear</button>
               </span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">remote access</div>
+            <div class="opt-title up">Remote Access</div>
             <div class="opt-row">
-              <span class="k">status<small id="optRemoteStatus">Loading this page directly from the Pi — leave blank</small></span>
+              <span class="k">Status<small id="optRemoteStatus">Loading this page directly from the Pi — leave blank</small></span>
             </div>
             <div class="opt-row">
-              <span class="k">caden server address<small>Only needed when this exact page is loaded from somewhere else (e.g. GitHub Pages) and can't reach the Pi at a relative path — e.g. http://&lt;pi-ip-or-hostname&gt;:7777. Reloads the page once saved.</small></span>
+              <span class="k">Caden server address<small>Only needed when this exact page is loaded from somewhere else (e.g. GitHub Pages) and can't reach the Pi at a relative path — e.g. http://&lt;pi-ip-or-hostname&gt;:7777. Reloads the page once saved.</small></span>
               <span class="ctl">
                 <input type="text" id="optRemoteBase" class="opt-input" placeholder="http://192.168.1.50:7777" autocomplete="off" spellcheck="false">
-                <button class="btn" id="optRemoteSave">save</button>
-                <button class="btn btn-cancel" id="optRemoteClear">clear</button>
+                <button class="btn" id="optRemoteSave">Save</button>
+                <button class="btn btn-cancel" id="optRemoteClear">Clear</button>
               </span>
             </div>
           </div>
 
           <div class="opt-section">
-            <div class="opt-title up">raw status</div>
+            <div class="opt-title up">Raw Status</div>
             <details>
-              <summary style="cursor:pointer; color: var(--dim); font-size:12px;">/api/status</summary>
+              <summary style="cursor:pointer; color: var(--g40); font-size:11px; letter-spacing:0.14em; text-transform:uppercase;">/api/status</summary>
               <pre class="opt-pre" id="optRawStatus">—</pre>
             </details>
           </div>
@@ -639,7 +634,7 @@
     </div>
   </section>
 
-  <div class="footer up">caden lives here · full access, audited · for indoor use only</div>
+  <div class="footer up"><span>Caden Agent Console</span><span>Full System Access · Audited</span><span>For Indoor Use Only</span></div>
 </div>
 <script>
 (() => {
