@@ -1212,24 +1212,56 @@
     setSfxBtn();
   });
 
-  function ensureAudioCtx() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      for (const [name, url] of Object.entries(SFX_FILES)) {
-        fetch(url).then((r) => r.arrayBuffer()).then((buf) => audioCtx.decodeAudioData(buf)).then((decoded) => { sfxBuffers[name] = decoded; }).catch(() => {});
-      }
+  // Fetching + decoding audio needs no user gesture at all — only actually
+  // *resuming/starting* an AudioContext does. The previous version bundled
+  // both into one gesture-gated ensureAudioCtx(), so the six WAVs only
+  // started fetching on the very first Send/Enter — meaning the very first
+  // real sound (the "sent" chime, broadcast over /ws/sfx within
+  // milliseconds of that same click) almost always raced past the fetch +
+  // decodeAudioData still in flight, found sfxBuffers[name] undefined, and
+  // playSfxAt() silently dropped it. The Options tab's test buttons only
+  // "worked" because by the time anyone clicks into Options and hits one,
+  // the decode has long since finished — same bug, just outrun. Splitting
+  // decode (eager, on load) from resume (gesture-gated) removes the race
+  // entirely instead of just narrowing it.
+  // Anything that tries to play before its buffer has finished decoding
+  // (e.g. a message sent in the first instant after page load, before the
+  // eager preload below has had time to finish at all) queues here instead
+  // of being silently dropped — flushed the moment that buffer arrives, in
+  // preloadSfx()'s decode handler below.
+  let pendingSfx = [];
+
+  function preloadSfx() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    for (const [name, url] of Object.entries(SFX_FILES)) {
+      fetch(url).then((r) => r.arrayBuffer()).then((buf) => audioCtx.decodeAudioData(buf)).then((decoded) => {
+        sfxBuffers[name] = decoded;
+        pendingSfx = pendingSfx.filter((p) => {
+          if (p.name !== name) return true;
+          playSfxAt(p.name, p.playAtMs);
+          return false;
+        });
+      }).catch(() => {});
     }
-    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   }
-  // Browsers require a real user gesture before audio can play — the send
-  // button click (or an Options test-sound click) is exactly that, so
-  // unlock (and start preloading) there.
-  sendBtn.addEventListener('click', ensureAudioCtx, { once: true });
-  inputField.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) ensureAudioCtx(); }, { once: true });
+  preloadSfx();
+
+  function unlockAudioCtx() {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  }
+  // Still gesture-gated (browsers require this for anything to actually be
+  // audible), but now purely about resuming a context that's already
+  // preloaded — and listened for broadly (any first click/keydown
+  // anywhere), not just Send/Enter specifically, so an unrelated first
+  // interaction (opening the System or Options tab, say) unlocks it just
+  // as well.
+  document.addEventListener('pointerdown', unlockAudioCtx, { once: true });
+  document.addEventListener('keydown', unlockAudioCtx, { once: true });
 
   document.querySelectorAll('[data-sfx-test]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      ensureAudioCtx();
+      unlockAudioCtx();
       fetch('/api/sfx/test', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ event: btn.dataset.sfxTest }),
@@ -1239,9 +1271,10 @@
 
   // "thinking" loops (see startThinkingLoop in sfx.ts for the Pi-side
   // mirror) — Web Audio's loop=true just replays the same buffer back to
-  // back, sample-accurate, so the seamless-loop WAV (no fade, whole-cycle
-  // periodicity) never clicks at the wrap point. Any other event stops it
-  // immediately, same handoff semantics as the server side.
+  // back, sample-accurate, so the seamless-loop WAV (silence at both ends
+  // of the buffer — see gen-sfx.mjs) never clicks at the wrap point. Any
+  // other event stops it immediately, same handoff semantics as the
+  // server side.
   let thinkingSource = null;
   function stopThinkingSource() {
     if (thinkingSource) {
@@ -1252,7 +1285,8 @@
 
   function playSfxAt(name, playAtMs) {
     if (name !== 'thinking') stopThinkingSource();
-    if (!sfxEnabled || !audioCtx || !sfxBuffers[name]) return;
+    if (!sfxEnabled || !audioCtx) return;
+    if (!sfxBuffers[name]) { pendingSfx.push({ name, playAtMs }); return; }
     const delaySec = Math.max(0, (playAtMs - Date.now()) / 1000);
     const src = audioCtx.createBufferSource();
     src.buffer = sfxBuffers[name];
