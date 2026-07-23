@@ -54,21 +54,27 @@ function silence(ms) {
   return new Float64Array(Math.round((ms / 1000) * SAMPLE_RATE));
 }
 
-// A perfectly seamless loop unit: no fade envelope (which would leave an
-// audible dip at the wrap point), and both the carrier and its amplitude
-// modulator are constrained to complete a whole number of cycles within
-// `ms` — so sample[0] and the sample just past the end are bit-identical to
-// where the previous repetition left off. Web Audio's loop=true just plays
-// the buffer back to back, so periodicity is the only thing that matters.
-function loopableTone({ ms, carrierFreq, modFreq, gainBase, gainDepth, shimmerFreq, shimmerGain = 0 }) {
+// A soft, light plucked/bell note — quick attack, exponential decay, a
+// quiet octave-up shimmer for a touch of bell-like ring. Unlike glideTone
+// (built for one continuous sweep), this is for short discrete notes in a
+// rhythmic sequence — the "hold music" register (see `thinking` below)
+// rather than one smooth whoosh. A hard linear release is layered on top
+// of the exponential decay for the note's last releaseMs regardless of how
+// far the exponential itself has decayed by then — this guarantees the
+// note reaches exact silence at its own end, which matters here because
+// notes are concatenated with real silence() between them: without the
+// forced release, an exponential tail still audible at cutoff would click.
+function pluckTone({ freq, ms, gain = 0.3, shimmer = 0.15, attackMs = 10, decayRate = 9, releaseMs = 14 }) {
   const n = Math.round((ms / 1000) * SAMPLE_RATE);
+  const attackN = Math.max(1, Math.round((attackMs / 1000) * SAMPLE_RATE));
+  const releaseN = Math.min(Math.round((releaseMs / 1000) * SAMPLE_RATE), n - attackN);
   const samples = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const t = i / SAMPLE_RATE;
-    const carrier = Math.sin(2 * Math.PI * carrierFreq * t);
-    const shimmer = shimmerGain ? Math.sin(2 * Math.PI * shimmerFreq * t) * shimmerGain : 0;
-    const env = gainBase + gainDepth * (0.5 + 0.5 * Math.sin(2 * Math.PI * modFreq * t));
-    samples[i] = (carrier + shimmer) * env;
+    const v = Math.sin(2 * Math.PI * freq * t) + shimmer * Math.sin(2 * Math.PI * freq * 2 * t);
+    let env = i < attackN ? i / attackN : Math.exp(-decayRate * ((i - attackN) / SAMPLE_RATE));
+    if (releaseN > 0 && i > n - releaseN) env *= Math.max(0, (n - i) / releaseN);
+    samples[i] = v * gain * env;
   }
   return samples;
 }
@@ -154,19 +160,40 @@ const error = lowpass(
   3200,
 );
 
-// "thinking" — a soft, slowly-breathing hum, looped for as long as a turn
-// is actually doing tool work (see startThinkingLoop in sfx.ts / loop=true
-// in index.html) rather than a single blip — 330Hz carrier with a gentle
-// 3Hz pulse and a very quiet fifth-above shimmer layer for warmth, all an
-// exact whole number of cycles over 1 second so the loop point is inaudible.
-// Deliberately NOT passed through lowpass() like the others: a causal
-// filter starts from a cold (zero) internal state, so filtering a loop unit
-// directly would leave sample[0] mismatched with the (steady-state
-// filtered) value at the end — reintroducing exactly the audible click at
-// the wrap point this loop's whole-cycle-count math was built to avoid.
-// The raw tone is already soft/pure (low gain, sine-only) and doesn't need
-// it anyway.
-const thinking = loopableTone({ ms: 1000, carrierFreq: 330, modFreq: 3, gainBase: 0.09, gainDepth: 0.05, shimmerFreq: 495, shimmerGain: 0.02 });
+// "thinking" — soft call-hold-style loading music, looped for as long as a
+// turn is actually doing tool work (see startThinkingLoop in sfx.ts /
+// loop=true in index.html): three soft repeated notes then a quick
+// two-note "flourish that resolves" — bum, bum, bum, ba-dum — the register
+// of a phone system's hold/transfer jingle, light and unobtrusive rather
+// than a continuous ambient hum (the previous design). Seamlessness here
+// comes from silence, not exact waveform periodicity: every pluckTone()
+// note has a forced release to true zero at its own end (see pluckTone),
+// and the loop closes with ~450ms of real silence before it repeats — as
+// long as both the tail and the next attack start from actual 0, the wrap
+// is inaudible regardless of what's musically happening in between, which
+// is what makes a discrete rhythmic phrase loop cleanly (a continuous hum
+// needs the whole-cycle-count trick instead; a plucked phrase with real
+// rests between notes doesn't). This is also why, unlike the previous
+// design, this one CAN safely go through lowpass() like the other five:
+// the cold-start transient that made filtering unsafe for a continuous
+// loop is inaudible here because the signal itself is already at/near
+// silence at both the start and end of the buffer, so the filter's state
+// has fully settled to ~0 by the time the tail silence ends.
+const thinking = lowpass(
+  concat(
+    pluckTone({ freq: 220.0, ms: 140, gain: 0.16, shimmer: 0.16 }), // bum
+    silence(100),
+    pluckTone({ freq: 220.0, ms: 140, gain: 0.16, shimmer: 0.16 }), // bum
+    silence(100),
+    pluckTone({ freq: 220.0, ms: 140, gain: 0.16, shimmer: 0.16 }), // bum
+    silence(80),
+    pluckTone({ freq: 277.18, ms: 90, gain: 0.14, shimmer: 0.18, decayRate: 14 }), // ba
+    silence(15),
+    pluckTone({ freq: 220.0, ms: 240, gain: 0.18, shimmer: 0.16 }), // dum (settles)
+    silence(455), // rest before the phrase repeats
+  ),
+  4500,
+);
 
 // "reminder" — a warm two-tone glide (perfect fourth up), deliberately the
 // most attention-getting sound since it fires unprompted — kept brighter

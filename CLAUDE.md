@@ -484,9 +484,10 @@ license/CDN dependency this way). The sound language is deliberately the
 modern-AI-assistant register — soft, phase-accumulated pitch glides and
 layered shimmer tones passed through a one-pole lowpass, closer to
 Siri/Meta-AI-style product chimes — rather than the discrete chiptune-style
-square-wave notes this replaced; `glideTone()`/`lowpass()` in the script are
-the primitives behind that (`thinking` is the one exception, kept
-filter-free — see "Looping SFX" below for why):
+square-wave notes this replaced; `glideTone()`/`pluckTone()`/`lowpass()` in
+the script are the primitives behind that (`thinking` is the one sound built
+from short plucked notes instead of a continuous glide — see "Looping SFX"
+below for why):
 - `sent` — the server received a message.
 - `thinking` — the one looping sound: starts the moment a turn begins
   actually using tools (not on every reply), and keeps softly looping until
@@ -513,6 +514,27 @@ sounds as decoded `AudioBuffer`s up front, and on receiving
 `{event, play_at}` computes `delay = play_at - Date.now()` and calls Web
 Audio's `AudioBufferSourceNode.start(audioCtx.currentTime + delay)` —
 sample-accurate once invoked, unlike a bare `setTimeout` + `play()`.
+
+**Preloading and unlocking are two different things, and used to be
+wrongly bundled together.** Fetching + `decodeAudioData()`-ing the six WAVs
+needs no user gesture at all; only actually resuming/starting an
+`AudioContext` does. An earlier version bundled both into one gesture-gated
+`ensureAudioCtx()` call (fired on the Send button's first click or Enter
+keydown) — which meant the six WAVs only started fetching at that same
+instant a real chat turn began, and the "sent" chime broadcast over
+`/ws/sfx` within milliseconds of that same click almost always raced past
+the still-in-flight decode, found its buffer undefined, and got silently
+dropped. The Options tab's manual test buttons only ever "worked" because
+by the time someone opens Options and clicks one, decoding has long since
+finished — same bug, just outrun by not testing it the way it actually gets
+used. `preloadSfx()` now runs immediately at page load (no gesture needed),
+and a separate `unlockAudioCtx()` — listening for *any* first `pointerdown`
+or `keydown` on the page, not just Send/Enter specifically — only resumes
+the already-decoded context. Belt-and-suspenders on top of that: anything
+that still tries to play before its buffer exists queues in `pendingSfx`
+and gets flushed the moment that buffer's decode resolves, so nothing gets
+silently dropped even in a genuine edge case (a message sent in the very
+first instant after page load).
 
 **The Pi's local playback is compensated, not just scheduled for `playAt`.**
 The browser's path has no startup cost once the AudioContext exists, but
@@ -546,19 +568,25 @@ hardware to hear it) that the broadcast lead time and WAV-header duration
 parsing are both correct; the actual startup-overhead measurement can only
 be validated on the real Pi where `aplay` exists.
 
-**Looping SFX (`thinking`).** `thinking.wav` isn't a blip — it's a 1-second
-seamless loop unit (`loopableTone()` in `gen-sfx.mjs`): a soft carrier tone,
-a gentle amplitude pulse, and a very quiet fifth-above shimmer layer for
-warmth, all three constrained to complete a *whole number* of cycles within
-the buffer (330, 3, and 495 respectively), so `sample[0]` picks up exactly
-where the end of the buffer left off — verified directly against the
-generated WAV (the sample-to-sample delta across the wrap point matches the
-delta just inside the loop exactly, bit-for-bit). No fade envelope either,
-since a fade-to-silence would itself create an audible dip every
-repetition — and deliberately not run through `gen-sfx.mjs`'s `lowpass()`
-pass like the other five sounds, since a causal filter's cold-start
-transient would reintroduce exactly the seam discontinuity the whole-cycle
-math exists to avoid.
+**Looping SFX (`thinking`).** `thinking.wav` isn't a blip — it's a 1.5s
+seamless loop unit (`gen-sfx.mjs`) built as a soft call-hold/loading jingle:
+three quiet plucked notes then a two-note flourish that resolves — bum,
+bum, bum, ba-dum — using the light bell-like `pluckTone()` (quick attack,
+exponential decay), not the continuous ambient hum this replaced.
+Seamlessness here comes from silence, not exact waveform periodicity: every
+`pluckTone()` note has a forced linear release to true zero at its own end
+regardless of how far its exponential decay has gotten by then (so
+concatenating it with real `silence()` between notes never clicks), and the
+phrase closes with ~450ms of real silence before it repeats — as long as
+both the tail and the next attack start from actual 0, the wrap is
+inaudible no matter what's musically happening in between. Verified
+directly against the generated WAV: both the first and last few samples of
+the buffer are exactly 0. This is also why, unlike the previous continuous-
+hum design, this one safely goes through `gen-sfx.mjs`'s `lowpass()` pass
+like the other five sounds — the cold-start transient that made filtering
+unsafe for a continuous loop is inaudible here, since the signal is already
+at/near silence at both ends of the buffer, so the filter's internal state
+has fully settled to ~0 well before the tail silence ends.
 
 The browser just sets `AudioBufferSourceNode.loop = true` — Web Audio
 replays a looping buffer back-to-back with no gap by construction. The Pi
