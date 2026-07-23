@@ -3,8 +3,9 @@
 // the web UI. Deliberately NOT real "calls": the Telegram Bot API has no
 // access to live voice/video calls at all — those are end-to-end encrypted
 // client-to-client and never exposed to bots. The feasible equivalent is
-// voice NOTES — a recorded message in, transcribed and answered with both
-// a text reply and a synthesized voice note back.
+// voice NOTES in — a recorded message transcribed (Groq Whisper) and
+// answered with a text reply. No voice reply back — TTS is dropped for now
+// (see git history if it comes back).
 //
 // Talks to the Bot API directly over plain fetch, no SDK — it's a small,
 // well-documented REST API (same "a few fetch calls beat an extra
@@ -16,7 +17,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { compactHistoryIfNeeded, runAgentTurnRetrying } from "./agent.js";
 import { transcribeAudio } from "./providers.js";
-import { synthesizeSpeech } from "./piper.js";
 import { triggerSfx } from "./sfx.js";
 import { markBusy, markIdle } from "./activity.js";
 import { auditEvents } from "./tools/shell.js";
@@ -102,25 +102,6 @@ async function sendText(chatId: number, text: string): Promise<void> {
   }
 }
 
-// sendVoice (the round "voice message" bubble) requires actual OGG/Opus —
-// synthesizeSpeech returns WAV, so this sends a regular audio attachment
-// instead (sendAudio), which accepts WAV without needing an ffmpeg re-encode.
-async function sendVoiceReply(chatId: number, text: string): Promise<void> {
-  try {
-    const wav = await synthesizeSpeech(text);
-    const form = new FormData();
-    form.append("chat_id", String(chatId));
-    form.append("audio", new Blob([wav as unknown as BlobPart], { type: "audio/wav" }), "caden.wav");
-    const resp = await fetch(`${API}/sendAudio`, { method: "POST", body: form, signal: AbortSignal.timeout(40_000) });
-    const data: any = await resp.json();
-    if (!data.ok) throw new Error(data.description || "sendAudio failed");
-  } catch (err) {
-    // A missing voice reply shouldn't take down the text reply that already
-    // went out — log it and move on.
-    console.error("[telegram] voice reply failed:", err);
-  }
-}
-
 async function downloadVoiceNote(fileId: string): Promise<Buffer> {
   const file = await tgCall("getFile", { file_id: fileId });
   const resp = await fetch(`${FILE_API}/${file.file_path}`, { signal: AbortSignal.timeout(40_000) });
@@ -175,7 +156,6 @@ async function handleMessage(msg: any): Promise<void> {
     history.push({ role: "assistant", content: result.reply });
     triggerSfx("success");
     await sendText(chatId, (isVoice ? `Heard: "${userText}"\n\n` : "") + result.reply);
-    await sendVoiceReply(chatId, result.reply);
   } catch (err) {
     triggerSfx("error");
     await sendText(chatId, "Something went wrong: " + String((err as Error).message ?? err));
