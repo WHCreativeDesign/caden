@@ -1,6 +1,6 @@
 {
   "name": "caden",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Caden — a personal agent daemon with real shell and browser control, running on a Raspberry Pi.",
   "private": true,
   "type": "module",
