@@ -114,7 +114,7 @@
     position: absolute; top: 50%; left: 50%; width: 23px; height: 23px; margin: -11.5px;
     background: var(--wht);
     border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%;
-    animation: ooze-in 0.7s var(--ease) both, snap-corners 8s steps(1) infinite, wobble-a 6s ease-in-out infinite;
+    animation: ooze-in 0.7s var(--ease) both, snap-corners 8s cubic-bezier(0.16, 1, 0.3, 1) infinite, wobble-a 6s ease-in-out infinite;
   }
   .mark i.f:nth-of-type(2) {
     animation-name: ooze-in, snap-corners, wobble-b;
@@ -127,19 +127,26 @@
   }
   @keyframes ooze-in { from { opacity: 0; transform: scale(0); border-radius: 50%; } to { opacity: 1; transform: scale(1); } }
 
-  /* Four stops at the corners of a diamond (45/135/225/315°, radius 10px).
-     The hold-then-jump comes from `steps(1)` on the animation itself (see
-     above) — a timing function applies *within* each keyframe-to-keyframe
-     segment, not once across the whole cycle, so steps(1) per segment is
-     what gives one clean jump per stop; steps(4) here would wrongly
-     subdivide every segment into 4 micro-steps, compounding into 16 jumps
-     instead of the 4 this is actually going for. */
+  /* Four stops at the corners of a diamond (45/135/225/315°, radius 10px)
+     — a mechanical SNAP TWEEN between them, not an instant teleport: each
+     pair of keyframes very close together (e.g. 22.5% and 25%) holds the
+     same value right up until a short ~200ms window, then actually moves
+     to the next point over that window using a stiff, fast-decelerating
+     curve (cubic-bezier(0.16,1,0.3,1), set once on the animation itself —
+     see above). A timing function applies *within* each keyframe-to-
+     keyframe segment, so it only visibly does anything across those short
+     transition windows; the long 0%→22.5%-style hold segments have
+     identical start/end values, so there's nothing for it to ease. */
   @keyframes snap-corners {
-    0%   { translate: 7.07px 7.07px; }   /* point 1 — bottom-right corner */
-    25%  { translate: -7.07px 7.07px; }  /* point 2 — bottom-left corner */
-    50%  { translate: -7.07px -7.07px; } /* point 3 — top-left corner */
-    75%  { translate: 7.07px -7.07px; }  /* point 4 — top-right corner */
-    100% { translate: 7.07px 7.07px; }   /* back to point 1 */
+    0%     { translate: 7.07px 7.07px; }   /* point 1 — bottom-right, holding */
+    22.5%  { translate: 7.07px 7.07px; }   /* still point 1, right up to the snap */
+    25%    { translate: -7.07px 7.07px; }  /* point 2 — bottom-left, snap lands */
+    47.5%  { translate: -7.07px 7.07px; }  /* holding at point 2 */
+    50%    { translate: -7.07px -7.07px; } /* point 3 — top-left */
+    72.5%  { translate: -7.07px -7.07px; } /* holding at point 3 */
+    75%    { translate: 7.07px -7.07px; }  /* point 4 — top-right */
+    97.5%  { translate: 7.07px -7.07px; }  /* holding at point 4 */
+    100%   { translate: 7.07px 7.07px; }   /* snap back to point 1, loop */
   }
   /* In-place liquid wobble only — scale + border-radius, no position, no
      rotation — layered on top of the stepped snap above via the separate
@@ -438,8 +445,15 @@
      own, it only supplies the filter definition referenced by CSS. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <filter id="caden-goo">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+    <!-- x/y/width/height widen the filter's effects region well past SVG's
+         default -10%/-10%/120%/120% (sized off the element's own bounding
+         box) — a CSS filter applied to an HTML element (as opposed to
+         inside pure SVG) gets clipped hard to that region in Chrome, and a
+         stdDeviation=3+ blur on a ~50px box extends past the default
+         margin, so the merge was silently clipped away there — this is
+         what "the liquify effect isn't visible on Chrome" actually was. -->
+    <filter id="caden-goo" x="-75%" y="-75%" width="250%" height="250%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
       <feColorMatrix in="blur" mode="matrix"
         values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -10" result="goo" />
       <feComposite in="SourceGraphic" in2="goo" operator="atop" />
